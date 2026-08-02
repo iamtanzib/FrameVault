@@ -1,0 +1,8 @@
+{
+  "name": "all-in-one-downloader-monorepo",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ]
+}

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>All in One Downloader</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7 10 12 15 17 10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      <span class="header-title">AIO Downloader</span>
+    </div>
+    <div class="status-dot" id="statusDot" title="Disconnected"></div>
+  </div>
+
+  <!-- Send Page URL Button -->
+  <button class="send-page-btn" id="sendPageBtn">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="22" y1="2" x2="11" y2="13"/>
+      <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+    </svg>
+    Send Page URL to App
+  </button>
+
+  <!-- Media List -->
+  <div class="section-label" id="sectionLabel">Detected Media</div>
+  <div class="media-list" id="mediaList">
+    <div class="empty-state" id="emptyState">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.4">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <span>No media detected on this page</span>
+      <span class="empty-hint">Browse a page with videos or audio to see them here</span>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

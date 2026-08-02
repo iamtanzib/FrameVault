@@ -1,0 +1,60 @@
+{
+  "name": "@aio-downloader/standalone",
+  "version": "1.0.0",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build && electron-builder"
+  },
+  "dependencies": {
+    "@aio-downloader/core": "*",
+    "@aio-downloader/ui": "*",
+    "electron-updater": "^6.8.9",
+    "lucide-react": "^0.292.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "ws": "^8.21.1"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^4.3.1",
+    "electron": "^32.0.1",
+    "electron-builder": "^24.13.3",
+    "electron-packager": "^17.1.2",
+    "typescript": "^5.5.3",
+    "vite": "^5.4.1",
+    "vite-plugin-electron": "^0.28.7",
+    "vite-plugin-electron-renderer": "^0.14.5"
+  },
+  "description": "All In One Downloader",
+  "author": "AIO Downloader Team",
+  "build": {
+    "appId": "com.aiodownloader.app",
+    "productName": "All in One Downloader",
+    "electronVersion": "32.0.1",
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "license": "build/license.txt"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "iamtanzib",
+        "repo": "FrameVault"
+      }
+    ],
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ]
+  }
+}
