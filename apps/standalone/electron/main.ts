@@ -127,11 +127,11 @@ if (!gotTheLock) {
   });
 
   // Check for updates!
-  autoUpdater.checkForUpdatesAndNotify();
+  autoUpdater.checkForUpdates();
 
   // Poll for updates every 15 minutes
   setInterval(() => {
-    autoUpdater.checkForUpdatesAndNotify();
+    autoUpdater.checkForUpdates();
   }, 15 * 60 * 1000);
 
   // When an update is downloaded
@@ -453,5 +453,6 @@ ipcMain.on('install-update', () => {
   } catch (err) {
     console.error('Failed to create backup for rollback', err);
   }
-  autoUpdater.quitAndInstall(false, true);
+  // isSilent = true, isForceRunAfter = true (No setup wizard UI)
+  autoUpdater.quitAndInstall(true, true);
 });
