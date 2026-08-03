@@ -37,7 +37,7 @@ function connectToApp() {
     ws.onopen = () => {
       wsConnected = true;
       updateAllBadges();
-      console.log('[AIO] Connected to desktop app');
+      console.log('[FrameVault] Connected to desktop app');
     };
 
     ws.onclose = () => {
@@ -286,4 +286,4 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // ---- Init ----
 connectToApp();
-console.log('[AIO Downloader] Background service worker started');
+console.log('[FrameVault] Background service worker started');

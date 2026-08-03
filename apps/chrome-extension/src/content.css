@@ -2,7 +2,7 @@
    Content Script Styles — Video Overlay Button
    ============================================= */
 
-.aio-download-overlay-btn {
+.framevault-overlay-btn {
   position: absolute;
   top: 10px;
   right: 10px;
@@ -32,28 +32,28 @@
 }
 
 /* Show button when hovering the video's parent container */
-*:hover > .aio-download-overlay-btn,
-.aio-download-overlay-btn:hover {
+*:hover > .framevault-overlay-btn,
+.framevault-overlay-btn:hover {
   opacity: 1;
   transform: translateY(0);
 }
 
-.aio-download-overlay-btn:hover {
+.framevault-overlay-btn:hover {
   background: rgba(139, 92, 246, 1);
   box-shadow: 0 4px 20px rgba(139, 92, 246, 0.45);
 }
 
-.aio-download-overlay-btn:active {
+.framevault-overlay-btn:active {
   transform: scale(0.96);
 }
 
-.aio-download-overlay-btn svg {
+.framevault-overlay-btn svg {
   flex-shrink: 0;
 }
 
 /* ---- Toast Notification ---- */
 
-.aio-toast {
+.framevault-toast {
   position: fixed;
   bottom: 24px;
   left: 50%;
@@ -76,7 +76,7 @@
   white-space: nowrap;
 }
 
-.aio-toast-error {
+.framevault-toast-error {
   border-color: rgba(239, 68, 68, 0.4);
   color: #fca5a5;
 }

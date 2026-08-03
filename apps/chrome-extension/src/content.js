@@ -4,7 +4,7 @@
 // Injects a floating "Download" button on detected <video> elements.
 // Uses MutationObserver to catch dynamically-loaded players (SPA sites).
 
-const BUTTON_CLASS = 'aio-download-overlay-btn';
+const BUTTON_CLASS = 'framevault-overlay-btn';
 const PROCESSED_ATTR = 'data-aio-processed';
 
 function createDownloadButton(videoElement) {
@@ -47,13 +47,14 @@ function createDownloadButton(videoElement) {
       type: 'sendPageUrl'
     }, (response) => {
       if (response && response.success) {
-        showToast('Sent to All in One Downloader!');
+        showToast('Sent to FrameVault!');
       } else {
-        showToast('App not running. Launching AIO Downloader...', true);
-        // Trigger the custom protocol to wake up the app!
+        showToast('App not running. Launching FrameVault...', true);
+        // Fallback: try to wake up the app using the custom protocol
         const launchIframe = document.createElement('iframe');
         launchIframe.style.display = 'none';
-        launchIframe.src = 'aio-downloader://start';
+        const pageUrl = window.location.href;
+        launchIframe.src = `framevault://download?url=${encodeURIComponent(pageUrl)}`;
         document.body.appendChild(launchIframe);
         
         setTimeout(() => {
@@ -69,12 +70,12 @@ function createDownloadButton(videoElement) {
 
 function showToast(message, isError = false) {
   // Remove any existing toast
-  const existing = document.querySelector('.aio-toast');
+  const existing = document.querySelector('.framevault-toast');
   if (existing) existing.remove();
 
   const toast = document.createElement('div');
-  toast.className = 'aio-toast';
-  if (isError) toast.classList.add('aio-toast-error');
+  toast.className = 'framevault-toast';
+  if (isError) toast.classList.add('framevault-toast-error');
   toast.textContent = message;
   document.body.appendChild(toast);
 

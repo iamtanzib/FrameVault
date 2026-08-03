@@ -12,9 +12,9 @@ export function Onboarding({ onComplete }: OnboardingProps) {
 
   const handleSelectFolder = async () => {
     const res = await (window as any).electronAPI.selectFolder();
-    if (res && res.path) {
-      setDestPath(res.path);
-      localStorage.setItem('lastDestPath', res.path);
+    if (res) {
+      setDestPath(res);
+      localStorage.setItem('lastDestPath', res);
     }
   };
 
@@ -45,7 +45,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
             <div className="w-20 h-20 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center mb-6">
               <DownloadCloud className="w-10 h-10 text-accent" />
             </div>
-            <h1 className="text-3xl font-bold text-primaryText mb-4">Welcome to AIO Downloader</h1>
+            <h1 className="text-3xl font-bold text-primaryText mb-4">Welcome to FrameVault</h1>
             <p className="text-secondaryText text-lg mb-8 max-w-md">
               The fastest, most reliable way to download media from anywhere on the web. Let's get you set up in just a few seconds.
             </p>

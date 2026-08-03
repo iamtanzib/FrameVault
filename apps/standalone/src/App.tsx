@@ -35,6 +35,11 @@ function App() {
   const [showAlreadyExistsModal, setShowAlreadyExistsModal] = useState(false);
   const [downloadedFilePath, setDownloadedFilePath] = useState('');
   
+  // Settings & Updates State
+  const [showSettings, setShowSettings] = useState(false);
+  const [launchOnStartup, setLaunchOnStartup] = useState(false);
+  const [updateReady, setUpdateReady] = useState(false);
+  
   // History State
   const [activeTab, setActiveTab] = useState<'download' | 'history'>('download');
   const [historyItems, setHistoryItems] = useState<HistoryEntry[]>([]);
@@ -52,6 +57,33 @@ function App() {
   }, [isYoutubeUrl, activeTab]);
 
   useEffect(() => {
+    // Get version and check for update notes
+    (window as any).electronAPI.getAppVersion?.().then((version: string) => {
+      setAppVersion(version);
+      
+      (window as any).electronAPI.getSettings?.().then((settings: any) => {
+        setLaunchOnStartup(settings?.launchOnStartup === true);
+      });
+      
+      const lastVersion = localStorage.getItem('framevault-last-version');
+      if (lastVersion && lastVersion !== version) {
+        // App was updated! Fetch release notes from GitHub
+        fetch(`https://api.github.com/repos/iamtanzib/FrameVault/releases/tags/v${version}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.body) {
+              setUpdateNotes(data.body);
+            } else {
+              setUpdateNotes(`Successfully updated to version ${version}!`);
+            }
+          })
+          .catch(() => {
+            setUpdateNotes(`Successfully updated to version ${version}!`);
+          });
+      }
+      localStorage.setItem('framevault-last-version', version);
+    });
+
     // Setup listeners
     (window as any).electronAPI.onProgress((payload: any) => {
       if (typeof payload === 'number') {
@@ -68,6 +100,19 @@ function App() {
       if (clean && clean.startsWith('[') && !clean.includes('[download]')) {
         setStatus(clean);
       }
+    });
+
+    (window as any).electronAPI.onUpdateStarted?.((info: any) => {
+      setUpdateInfo({ downloading: true, percent: 0 });
+    });
+
+    (window as any).electronAPI.onUpdateProgress?.((progressObj: any) => {
+      setUpdateInfo({ downloading: true, percent: progressObj.percent });
+    });
+
+    (window as any).electronAPI.onUpdateDownloadedReady?.((info: any) => {
+      setUpdateInfo({ downloading: false, percent: 100 });
+      setUpdateReady(true);
     });
 
     // Init binaries
@@ -319,6 +364,15 @@ function App() {
     handleDownload(currentBaseName);
   };
 
+  const [showOnboarding, setShowOnboarding] = useState(
+    localStorage.getItem('onboardingComplete') !== 'true'
+  );
+
+  const [binariesError, setBinariesError] = useState<string>('');
+  const [updateInfo, setUpdateInfo] = useState<{ downloading: boolean, percent: number }>({ downloading: false, percent: 0 });
+  const [appVersion, setAppVersion] = useState('');
+  const [updateNotes, setUpdateNotes] = useState<string | null>(null);
+
   if (!binariesReady) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center font-sans text-center px-6">
@@ -333,7 +387,7 @@ function App() {
         ) : (
           <>
             <div className="w-10 h-10 border-4 border-border border-t-accent rounded-full animate-spin mb-5"></div>
-            <div className="text-[14px] font-semibold text-primaryText mb-2">Asset Downloader</div>
+            <div className="text-[14px] font-semibold text-primaryText mb-2">FrameVault</div>
             <div className="text-[12px] font-medium text-secondaryText">{status || 'Initializing engine...'}</div>
           </>
         )}
@@ -344,10 +398,6 @@ function App() {
   const filteredHistory = historyItems
     .filter(item => filterSource === 'All Sources' || item.source === filterSource);
 
-  const [showOnboarding, setShowOnboarding] = useState(
-    localStorage.getItem('onboardingComplete') !== 'true'
-  );
-
   return (
     <>
       {showOnboarding && <Onboarding onComplete={() => setShowOnboarding(false)} />}
@@ -355,7 +405,16 @@ function App() {
       <div className="px-6 pt-5 pb-4 flex-1 flex flex-col">
         {/* Header */}
         <div className="flex justify-between items-center mb-4">
-            <h1 className="text-[14px] font-semibold">Asset Downloader</h1>
+            <h1 className="text-[14px] font-semibold flex items-center gap-2">
+              FrameVault 
+              {appVersion && <span className="text-secondaryText text-[10px] font-medium bg-surface px-1.5 py-0.5 rounded">v{appVersion}</span>}
+            </h1>
+            <button 
+              onClick={() => setShowSettings(true)}
+              className="p-1.5 rounded-md text-secondaryText hover:text-primaryText hover:bg-surface transition-colors"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
           </div>
 
           {/* Tabs */}
@@ -603,7 +662,56 @@ function App() {
             </div>
           )}
         </div>
-      </div>
+      
+      {updateInfo.downloading && !updateReady && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-surface border border-border w-[400px] rounded-xl shadow-2xl p-8 flex flex-col items-center text-center">
+            <div className="w-16 h-16 rounded-full bg-accent/20 flex items-center justify-center mb-6">
+              <RotateCcw className="w-8 h-8 text-accent animate-[spin_3s_linear_infinite]" />
+            </div>
+            <h2 className="text-[18px] font-semibold text-primaryText mb-3">FrameVault is Updating...</h2>
+            <p className="text-secondaryText text-[13px] mb-8">Please wait while we download the latest version.</p>
+            
+            <div className="w-full bg-background h-3 rounded-full overflow-hidden mb-3 border border-border">
+              <div 
+                className="bg-accent h-full transition-all duration-300"
+                style={{ width: `${Math.max(0, Math.min(100, updateInfo.percent))}%` }}
+              />
+            </div>
+            <div className="text-accent font-medium">{Math.round(updateInfo.percent)}%</div>
+          </div>
+        </div>
+      )}
+
+      {updateReady && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-surface border border-border w-[400px] rounded-xl shadow-2xl p-8 flex flex-col items-center text-center">
+            <div className="w-16 h-16 rounded-full bg-success/20 flex items-center justify-center mb-6">
+              <CheckCircle className="w-8 h-8 text-success" />
+            </div>
+            <h2 className="text-[18px] font-semibold text-primaryText mb-3">Update Ready!</h2>
+            <p className="text-secondaryText text-[13px] mb-8">A new version has been downloaded and verified successfully. Restart now to install.</p>
+            
+            <div className="flex w-full gap-3">
+              <Button 
+                variant="secondary" 
+                className="flex-1"
+                onClick={() => setUpdateReady(false)}
+              >
+                Later
+              </Button>
+              <Button 
+                variant="primary" 
+                className="flex-1"
+                onClick={() => (window as any).electronAPI.installUpdate()}
+              >
+                Restart Now
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
       
       {/* Success Modal */}
       {showSuccessModal && (
@@ -698,8 +806,70 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* Update Notes Modal */}
+      {updateNotes && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-6 animate-in fade-in duration-200">
+          <div className="bg-background border border-border w-full max-w-sm rounded-xl shadow-2xl p-6 flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center mb-4 text-accent">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+            </div>
+            <h2 className="text-[16px] font-bold text-primaryText mb-2">Update Successful!</h2>
+            <div className="text-[12px] font-medium text-secondaryText mb-6 max-h-[200px] overflow-y-auto whitespace-pre-wrap text-left w-full p-4 bg-surface rounded-lg border border-border/50 custom-scrollbar">
+              {updateNotes}
+            </div>
+            <Button
+              variant="primary"
+              onClick={() => setUpdateNotes(null)}
+              className="w-full"
+            >
+              Awesome!
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px] animate-in fade-in duration-200">
+          <div className="bg-surface border border-border w-[380px] rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-background/50">
+              <h2 className="text-[15px] font-semibold text-primaryText flex items-center gap-2">
+                <Settings className="w-4 h-4 text-secondaryText" />
+                Settings
+              </h2>
+              <button 
+                onClick={() => setShowSettings(false)}
+                className="p-1 rounded-md text-secondaryText hover:text-primaryText hover:bg-surface transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-6">
+              <div 
+                className="flex items-center justify-between cursor-pointer group"
+                onClick={() => {
+                    const val = !launchOnStartup;
+                    setLaunchOnStartup(val);
+                    (window as any).electronAPI.updateSettings({ launchOnStartup: val });
+                }}
+              >
+                <div className="flex flex-col">
+                  <span className="text-[13px] font-medium text-primaryText group-hover:text-accent transition-colors">Launch on Startup</span>
+                  <span className="text-[11px] text-secondaryText mt-0.5">Start FrameVault automatically when Windows boots.</span>
+                </div>
+                <div 
+                  className={`w-9 h-5 rounded-full p-0.5 transition-colors flex items-center ${launchOnStartup ? 'bg-accent' : 'bg-border'}`}
+                >
+                  <div className={`w-4 h-4 bg-primaryText rounded-full shadow-sm transform transition-transform ${launchOnStartup ? 'translate-x-4' : 'translate-x-0'}`} />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
-}
+};
 
 export default App;

@@ -1,6 +1,6 @@
 {
   "name": "@aio-downloader/standalone",
-  "version": "1.0.0",
+  "version": "1.0.6",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
@@ -26,11 +26,11 @@
     "vite-plugin-electron": "^0.28.7",
     "vite-plugin-electron-renderer": "^0.14.5"
   },
-  "description": "All In One Downloader",
-  "author": "AIO Downloader Team",
+  "description": "FrameVault",
+  "author": "FrameVault Team",
   "build": {
-    "appId": "com.aiodownloader.app",
-    "productName": "All in One Downloader",
+    "appId": "com.framevault.app",
+    "productName": "FrameVault",
     "electronVersion": "32.0.1",
     "directories": {
       "output": "release"
@@ -49,7 +49,8 @@
       {
         "provider": "github",
         "owner": "iamtanzib",
-        "repo": "FrameVault"
+        "repo": "FrameVault",
+        "releaseType": "release"
       }
     ],
     "files": [

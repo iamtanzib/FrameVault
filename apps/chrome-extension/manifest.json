@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "All in One Downloader",
-  "description": "Auto-detect downloadable media on any webpage and send to the All in One Downloader desktop app.",
+  "name": "FrameVault",
+  "description": "Auto-detect downloadable media on any webpage and send to the FrameVault desktop app.",
   "version": "1.0.0",
   "icons": {
     "16": "icons/icon16.png",
