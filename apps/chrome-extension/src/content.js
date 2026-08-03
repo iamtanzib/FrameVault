@@ -7,24 +7,18 @@
 const BUTTON_CLASS = 'framevault-overlay-btn';
 const PROCESSED_ATTR = 'data-aio-processed';
 
+// Track mouse globally to detect hover reliably across invisible overlays
+let mouseX = -1000;
+let mouseY = -1000;
+window.addEventListener('mousemove', (e) => {
+  mouseX = e.clientX;
+  mouseY = e.clientY;
+}, { passive: true });
+
 function createDownloadButton(videoElement) {
   // Don't double-process
   if (videoElement.getAttribute(PROCESSED_ATTR)) return;
   videoElement.setAttribute(PROCESSED_ATTR, 'true');
-
-  // Skip tiny videos (likely thumbnails or ads)
-  const rect = videoElement.getBoundingClientRect();
-  if (rect.width < 200 || rect.height < 120) return;
-
-  // Find or create a positioned container
-  let container = videoElement.parentElement;
-  if (!container) return;
-
-  // Ensure container is positioned so the button can be absolutely placed
-  const containerStyle = window.getComputedStyle(container);
-  if (containerStyle.position === 'static') {
-    container.style.position = 'relative';
-  }
 
   // Create the button
   const btn = document.createElement('div');
@@ -65,7 +59,44 @@ function createDownloadButton(videoElement) {
     });
   });
 
-  container.appendChild(btn);
+  // Append directly to body to escape all z-index trapping contexts
+  document.body.appendChild(btn);
+
+  let isHoveringButton = false;
+  btn.addEventListener('mouseenter', () => isHoveringButton = true);
+  btn.addEventListener('mouseleave', () => isHoveringButton = false);
+
+  const update = () => {
+    if (!videoElement.isConnected) {
+      btn.remove();
+      return;
+    }
+
+    const rect = videoElement.getBoundingClientRect();
+    
+    // Check if video is reasonably sized and visible
+    if (rect.width < 200 || rect.height < 120 || rect.bottom < 0 || rect.top > window.innerHeight) {
+      btn.style.opacity = '0';
+      btn.style.pointerEvents = 'none';
+      return;
+    }
+
+    // Use raw coordinates to detect hover, ignoring invisible blocking layers (like YT controls)
+    const isOverVideo = mouseX >= rect.left && mouseX <= rect.right && mouseY >= rect.top && mouseY <= rect.bottom;
+    
+    if (isOverVideo || isHoveringButton) {
+      btn.classList.add('visible');
+    } else {
+      btn.classList.remove('visible');
+    }
+
+    // Force fixed position tracking
+    btn.style.top = (rect.top + 16) + 'px';
+    btn.style.left = (rect.right - btn.offsetWidth - 16) + 'px';
+  };
+
+  // Sync position rapidly to handle scrolling and layout shifts (like theater mode)
+  setInterval(update, 50);
 }
 
 function showToast(message, isError = false) {

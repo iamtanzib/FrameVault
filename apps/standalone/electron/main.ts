@@ -202,8 +202,6 @@ if (!gotTheLock) {
   console.log('[FrameVault] WebSocket server listening on ws://localhost:9555');
 
   wss.on('connection', (ws) => {
-    console.log('[FrameVault] Chrome extension connected');
-
     ws.on('message', (raw) => {
       try {
         const data = JSON.parse(raw.toString());
@@ -237,7 +235,7 @@ if (!gotTheLock) {
     });
 
     ws.on('close', () => {
-      console.log('[FrameVault] Chrome extension disconnected');
+      // Intentionally empty to reduce terminal noise
     });
   });
 

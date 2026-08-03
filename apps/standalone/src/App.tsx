@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Button, Input, Dropdown, ProgressBar, RangeSlider } from '@aio-downloader/ui';
-import { Settings, Folder, Clock, CheckCircle, ExternalLink, X, Calendar, Filter, Trash2, PlayCircle, Music, SearchX, RotateCcw } from 'lucide-react';
+import { Settings, Folder, Clock, CheckCircle, ExternalLink, X, Calendar, Filter, Trash2, PlayCircle, Music, SearchX, RotateCcw, DownloadCloud } from 'lucide-react';
 import { Onboarding } from './components/Onboarding';
 
 export interface HistoryEntry {
@@ -211,7 +211,9 @@ function App() {
     const isYoutube = parsed.hostname.includes('youtube.com') || parsed.hostname.includes('youtu.be');
     setIsYoutubeUrl(isYoutube);
     
-    if (isYoutube) {
+    const isShorts = parsed.pathname.includes('/shorts/');
+    
+    if (isYoutube && !isShorts) {
       setStatus('Fetching video metadata...');
       (window as any).electronAPI.getMetadata(validUrl).then((res: any) => {
         if (res.success) {
@@ -404,39 +406,47 @@ function App() {
   return (
     <>
       {showOnboarding && <Onboarding onComplete={() => setShowOnboarding(false)} />}
-      <div className="flex-1 w-full bg-background overflow-y-auto overflow-x-hidden font-sans text-primaryText text-[12px] flex flex-col">
-      <div className="px-6 pt-5 pb-4 flex-1 flex flex-col">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-4">
-            <h1 className="text-[14px] font-semibold flex items-center gap-2">
-              FrameVault 
-              {appVersion && <span className="text-secondaryText text-[10px] font-medium bg-surface px-1.5 py-0.5 rounded">v{appVersion}</span>}
-            </h1>
-            <button 
-              onClick={() => setShowSettings(true)}
-              className="p-1.5 rounded-md text-secondaryText hover:text-primaryText hover:bg-surface transition-colors"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
-          </div>
+      <div className="flex-1 w-full h-full bg-background font-sans text-primaryText text-[12px] flex flex-row overflow-hidden">
+        
+        {/* Sidebar Navigation */}
+        <div className="w-[68px] shrink-0 bg-[#0E0E0E] border-r border-border flex flex-col items-center py-6 gap-2 relative z-10 shadow-[4px_0_24px_rgba(0,0,0,0.2)]">
+          <button 
+            onClick={() => setActiveTab('download')}
+            className={`relative w-full flex justify-center py-4 transition-all duration-200 ${activeTab === 'download' && !showSettings ? 'text-accent bg-white/[0.03]' : 'text-secondaryText hover:text-primaryText hover:bg-white/[0.02]'}`}
+          >
+            {activeTab === 'download' && !showSettings && <div className="absolute left-0 top-1/2 -translate-y-1/2 h-[50%] w-[3px] bg-accent rounded-r-full shadow-[0_0_8px_rgba(242,226,184,0.5)]" />}
+            <DownloadCloud className={`w-[22px] h-[22px] ${activeTab === 'download' && !showSettings ? 'fill-accent/20 stroke-[1.5px]' : 'stroke-[1.5px]'}`} />
+          </button>
 
-          {/* Tabs */}
-          <div className="border-b border-border mb-5">
-            <div className="flex gap-6 -mb-px">
-              <button 
-                onClick={() => setActiveTab('download')}
-                className={`font-medium text-[13px] border-b-2 pb-2 px-1 transition-all ${activeTab === 'download' ? 'text-accent border-accent' : 'text-secondaryText border-transparent hover:text-primaryText hover:border-border'}`}
-              >
-                Download
-              </button>
-              <button 
-                onClick={() => { setActiveTab('history'); setFilterSource('All Sources'); }}
-                className={`font-medium text-[13px] border-b-2 pb-2 px-1 transition-all ${activeTab === 'history' ? 'text-accent border-accent' : 'text-secondaryText border-transparent hover:text-primaryText hover:border-border'}`}
-              >
-                History
-              </button>
+          <button 
+            onClick={() => { setActiveTab('history'); setFilterSource('All Sources'); setShowSettings(false); }}
+            className={`relative w-full flex justify-center py-4 transition-all duration-200 ${activeTab === 'history' && !showSettings ? 'text-accent bg-white/[0.03]' : 'text-secondaryText hover:text-primaryText hover:bg-white/[0.02]'}`}
+          >
+            {activeTab === 'history' && !showSettings && <div className="absolute left-0 top-1/2 -translate-y-1/2 h-[50%] w-[3px] bg-accent rounded-r-full shadow-[0_0_8px_rgba(242,226,184,0.5)]" />}
+            <Clock className={`w-[22px] h-[22px] ${activeTab === 'history' && !showSettings ? 'fill-accent/20 stroke-[1.5px]' : 'stroke-[1.5px]'}`} />
+          </button>
+          
+          <div className="flex-1" />
+          
+          <button 
+            onClick={() => setShowSettings(true)}
+            className={`relative w-full flex justify-center py-4 transition-all duration-200 ${showSettings ? 'text-accent bg-white/[0.03]' : 'text-secondaryText hover:text-primaryText hover:bg-white/[0.02]'}`}
+          >
+            {showSettings && <div className="absolute left-0 top-1/2 -translate-y-1/2 h-[50%] w-[3px] bg-accent rounded-r-full shadow-[0_0_8px_rgba(242,226,184,0.5)]" />}
+            <Settings className={`w-[22px] h-[22px] ${showSettings ? 'fill-accent/20 stroke-[1.5px]' : 'stroke-[1.5px]'}`} />
+          </button>
+        </div>
+
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col overflow-y-auto overflow-x-hidden relative">
+          <div className="px-6 pt-5 pb-4 flex-1 flex flex-col w-full max-w-[620px] mx-auto">
+            {/* Header */}
+            <div className="flex justify-between items-center mb-6">
+              <h1 className="text-[15px] font-semibold flex items-center gap-2">
+                FrameVault 
+                {appVersion && <span className="text-secondaryText text-[10px] font-medium bg-surface border border-border px-1.5 py-0.5 rounded">v{appVersion}</span>}
+              </h1>
             </div>
-          </div>
 
           {activeTab === 'download' ? (
           <div className="space-y-5">
@@ -714,6 +724,7 @@ function App() {
           </div>
         </div>
       )}
+      </div>
     </div>
       
       {/* Success Modal */}

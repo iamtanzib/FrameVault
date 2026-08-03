@@ -28,6 +28,8 @@ let wsConnected = false;
 
 // ---- WebSocket Connection to Desktop App ----
 
+let keepAliveInterval = null;
+
 function connectToApp() {
   if (ws && ws.readyState === WebSocket.OPEN) return;
 
@@ -38,11 +40,20 @@ function connectToApp() {
       wsConnected = true;
       updateAllBadges();
       console.log('[FrameVault] Connected to desktop app');
+      
+      // Start heartbeat to keep Service Worker alive
+      if (keepAliveInterval) clearInterval(keepAliveInterval);
+      keepAliveInterval = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'ping' }));
+        }
+      }, 20000); // 20 seconds
     };
 
     ws.onclose = () => {
       wsConnected = false;
       ws = null;
+      if (keepAliveInterval) clearInterval(keepAliveInterval);
       updateAllBadges();
       // Retry connection every 5 seconds
       setTimeout(connectToApp, 5000);
@@ -51,6 +62,7 @@ function connectToApp() {
     ws.onerror = () => {
       wsConnected = false;
       ws = null;
+      if (keepAliveInterval) clearInterval(keepAliveInterval);
     };
 
     ws.onmessage = (event) => {
@@ -152,7 +164,7 @@ function updateBadge(tabId) {
   const list = detectedMedia.get(tabId) || [];
   const count = list.length;
 
-  chrome.action.setBadgeBackgroundColor({ color: wsConnected ? '#8b5cf6' : '#ef4444', tabId });
+  chrome.action.setBadgeBackgroundColor({ color: wsConnected ? '#f5a319' : '#ef4444', tabId });
   chrome.action.setBadgeText({
     text: count > 0 ? String(count) : '',
     tabId
