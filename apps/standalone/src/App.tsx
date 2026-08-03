@@ -134,6 +134,9 @@ function App() {
       }
     });
 
+    // Check for updates manually from frontend to prevent race conditions
+    (window as any).electronAPI.checkForUpdates?.();
+
     loadHistory();
 
     return () => {

@@ -38,5 +38,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   getSettings: () => ipcRenderer.invoke('get-settings'),
   updateSettings: (settings: any) => ipcRenderer.invoke('update-settings', settings),
-  installUpdate: () => ipcRenderer.send('install-update')
+  installUpdate: () => ipcRenderer.send('install-update'),
+  checkForUpdates: () => ipcRenderer.send('check-for-updates')
 });

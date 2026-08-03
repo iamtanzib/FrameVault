@@ -126,13 +126,8 @@ if (!gotTheLock) {
     args: ['--hidden']
   });
 
-  // Check for updates!
-  autoUpdater.checkForUpdates();
-
-  // Poll for updates every 15 minutes
-  setInterval(() => {
-    autoUpdater.checkForUpdates();
-  }, 15 * 60 * 1000);
+  // The frontend will manually trigger checkForUpdates to avoid race conditions.
+  // We remove the automatic check on boot from here.
 
   // When an update is downloaded
   autoUpdater.on('update-downloaded', (info: any) => {
@@ -443,6 +438,10 @@ ipcMain.handle('update-settings', (_event, newSettings) => {
   } catch (e: any) {
     return { success: false, error: e.message };
   }
+});
+
+ipcMain.on('check-for-updates', () => {
+  autoUpdater.checkForUpdates();
 });
 
 ipcMain.on('install-update', () => {
