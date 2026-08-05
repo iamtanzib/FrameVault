@@ -1265,7 +1265,7 @@ function App() {
                 <Button 
                   variant="secondary" 
                   className="h-7 text-[11px] min-w-[80px]"
-                  onClick={async (e) => {
+                  onClick={async (e: any) => {
                     const btn = e.currentTarget;
                     const path = await (window as any).electronAPI.copyExtensionPath();
                     btn.innerHTML = '<span class="text-success flex items-center gap-1">Copied ✓</span>';
