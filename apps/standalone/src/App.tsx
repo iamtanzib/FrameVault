@@ -540,7 +540,7 @@ function App() {
 
   // Main app: grow/shrink the window to fit content exactly.
   useEffect(() => {
-    if (!binariesReady || showOnboarding) return;
+    if (!binariesReady || isCheckingInitialUpdate || showOnboarding) return;
     const el = contentRef.current;
     if (!el) return;
     const apply = () => {
@@ -568,7 +568,7 @@ function App() {
     ro.observe(el);
     apply();
     return () => ro.disconnect();
-  }, [binariesReady, showOnboarding, updateNotes, showUpdatesModal, showSettings, showSuccessModal, showAlreadyExistsModal, updateReady, updateInfo.downloading]);
+  }, [binariesReady, isCheckingInitialUpdate, showOnboarding, updateNotes, showUpdatesModal, showSettings, showSuccessModal, showAlreadyExistsModal, updateReady, updateInfo.downloading]);
 
   if (!binariesReady || isCheckingInitialUpdate) {
     return (
