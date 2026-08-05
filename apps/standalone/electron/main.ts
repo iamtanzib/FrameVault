@@ -231,6 +231,10 @@ if (!gotTheLock) {
         autoUpdater.quitAndInstall(true, true);
       } else {
         // User is actively using the app, show them the UI modal.
+        new Notification({
+          title: 'Update Ready',
+          body: `FrameVault ${info.version || ''} is ready to install.`
+        }).show();
         mainWindow.webContents.send('update-downloaded-ready', info);
       }
     }
