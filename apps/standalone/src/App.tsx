@@ -55,7 +55,7 @@ function App() {
   const [wsError, setWsError] = useState('');
 
   // Card / metadata state
-  const [metadata, setMetadata] = useState<{ title: string; thumbnail: string; duration: number } | null>(null);
+  const [metadata, setMetadata] = useState<{ title: string; thumbnail: string; duration: number; id?: string } | null>(null);
   const [metaLoading, setMetaLoading] = useState(false);
   const [sourceName, setSourceName] = useState('');
   const [thumbError, setThumbError] = useState(false);
@@ -88,6 +88,7 @@ function App() {
         setLaunchOnStartup(settings?.launchOnStartup === true);
       });
 
+      const lastVersion = localStorage.getItem('framevault-last-version');
       fetch(`https://api.github.com/repos/iamtanzib/FrameVault/releases/tags/v${version}`)
         .then(res => res.json())
         .then(data => {
