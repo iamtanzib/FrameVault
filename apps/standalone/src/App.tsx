@@ -148,18 +148,21 @@ function App() {
 
     (window as any).electronAPI.onUpdateStarted?.((info: any) => {
       setIsCheckingUpdate(false);
+      setIsCheckingInitialUpdate(false);
       setUpdateCheckMessage('');
       setUpdateInfo({ downloading: true, percent: 0 });
     });
 
     (window as any).electronAPI.onUpdateNotAvailable?.(() => {
       setIsCheckingUpdate(false);
+      setIsCheckingInitialUpdate(false);
       setUpdateCheckMessage("You're already on the latest version!");
       setTimeout(() => setUpdateCheckMessage(''), 3000);
     });
 
     (window as any).electronAPI.onUpdateError?.((err: string) => {
       setIsCheckingUpdate(false);
+      setIsCheckingInitialUpdate(false);
       setUpdateCheckMessage(`Error: ${err}`);
       setTimeout(() => setUpdateCheckMessage(''), 3000);
     });
@@ -176,7 +179,16 @@ function App() {
           // electron-updater sometimes returns an array of release notes
           notes = Array.isArray(notes) ? notes.map((n: any) => n.note || n).join('\n') : String(notes);
         }
-        setPendingUpdateNotes(notes);
+        
+        // Clean up electron-updater's messy markdown/html extraction
+        notes = notes
+          .replace(/<[^>]*>?/gm, '') // Strip any stray HTML
+          .replace(/# What's New.*/gi, '') // Remove redundant header
+          .replace(/( - )/g, '\n\n• ') // Fix merged hyphen lists
+          .replace(/^(- )/gm, '• ') // Fix starting hyphens
+          .trim();
+          
+        setPendingUpdateNotes(notes || 'Bug fixes and performance improvements.');
       }
       setUpdateReady(true);
     });
@@ -513,6 +525,7 @@ function App() {
   const [currentReleaseNotes, setCurrentReleaseNotes] = useState<string | null>(null);
   const [showUpdatesModal, setShowUpdatesModal] = useState(false);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [isCheckingInitialUpdate, setIsCheckingInitialUpdate] = useState(true);
   const [updateCheckMessage, setUpdateCheckMessage] = useState('');
 
   // ---- Dynamic window height ----
@@ -534,7 +547,11 @@ function App() {
       let h = Math.ceil(el.getBoundingClientRect().height);
       
       // Dynamically override height if large modals are open so they don't get cut off!
-      if (updateNotes) {
+      if (updateReady) {
+         h = Math.max(h, 480);
+      } else if (updateInfo.downloading) {
+         h = Math.max(h, 400);
+      } else if (updateNotes) {
          h = Math.max(h, 480);
       } else if (showUpdatesModal) {
          h = Math.max(h, Math.max(480, h)); // Make sure updates modal always has enough room
@@ -551,9 +568,9 @@ function App() {
     ro.observe(el);
     apply();
     return () => ro.disconnect();
-  }, [binariesReady, showOnboarding, updateNotes, showUpdatesModal, showSettings, showSuccessModal, showAlreadyExistsModal]);
+  }, [binariesReady, showOnboarding, updateNotes, showUpdatesModal, showSettings, showSuccessModal, showAlreadyExistsModal, updateReady, updateInfo.downloading]);
 
-  if (!binariesReady) {
+  if (!binariesReady || isCheckingInitialUpdate) {
     return (
       <div className="relative h-screen w-full bg-background font-sans">
         {/* Minimal draggable strip with a close affordance (frameless window) */}
@@ -580,7 +597,9 @@ function App() {
                 <Loader2 className="h-6 w-6 animate-spin text-black" />
               </div>
               <div className="mb-1.5 text-[15px] font-semibold text-primaryText">FrameVault</div>
-              <div className="text-[12px] font-medium text-secondaryText">{status || 'Initializing engine...'}</div>
+              <div className="text-[12px] font-medium text-secondaryText">
+                {binariesReady && isCheckingInitialUpdate ? 'Checking for updates...' : (status || 'Initializing engine...')}
+              </div>
             </>
           )}
         </div>
