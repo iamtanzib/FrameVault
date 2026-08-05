@@ -110,6 +110,9 @@ function App() {
       if (lastVersion !== version) {
         localStorage.setItem('framevault-last-version', version);
       }
+      
+      // Auto-check for updates silently in the background on boot
+      (window as any).electronAPI.checkForUpdates?.();
     });
 
     // Setup listeners
@@ -512,7 +515,19 @@ function App() {
     const el = contentRef.current;
     if (!el) return;
     const apply = () => {
-      const h = Math.ceil(el.getBoundingClientRect().height);
+      let h = Math.ceil(el.getBoundingClientRect().height);
+      
+      // Dynamically override height if large modals are open so they don't get cut off!
+      if (updateNotes) {
+         h = Math.max(h, 480);
+      } else if (showUpdatesModal) {
+         h = Math.max(h, Math.max(480, h)); // Make sure updates modal always has enough room
+      } else if (showSettings) {
+         h = Math.max(h, 540);
+      } else if (showSuccessModal || showAlreadyExistsModal) {
+         h = Math.max(h, 380);
+      }
+      
       const clamped = Math.min(780, Math.max(300, h));
       (window as any).electronAPI.setWindowHeight?.(clamped);
     };
@@ -520,7 +535,7 @@ function App() {
     ro.observe(el);
     apply();
     return () => ro.disconnect();
-  }, [binariesReady, showOnboarding]);
+  }, [binariesReady, showOnboarding, updateNotes, showUpdatesModal, showSettings, showSuccessModal, showAlreadyExistsModal]);
 
   if (!binariesReady) {
     return (
