@@ -72,6 +72,18 @@ export function TitleBar({
           )}
         </button>
 
+        <button
+          onClick={onOpenSettings}
+          title="Settings"
+          className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
+            showSettings
+              ? 'bg-accent/12 text-accent'
+              : 'text-secondaryText hover:bg-white/[0.06] hover:text-primaryText'
+          }`}
+        >
+          <Settings className="h-[17px] w-[17px]" strokeWidth={1.8} />
+        </button>
+
 
         <div className="mx-1 h-4 w-px bg-border" />
 

@@ -16,21 +16,9 @@ function extractExtensionSilently() {
     const targetDir = path.join(app.getPath('userData'), 'chrome-extension');
     
     if (fs.existsSync(sourceDir)) {
-      if (!fs.existsSync(targetDir)) {
-        fs.mkdirSync(targetDir, { recursive: true });
-      }
-      const copyRecursiveSync = (src: string, dest: string) => {
-        const stats = fs.statSync(src);
-        if (stats.isDirectory()) {
-          if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
-          fs.readdirSync(src).forEach(file => {
-            copyRecursiveSync(path.join(src, file), path.join(dest, file));
-          });
-        } else {
-          fs.copyFileSync(src, dest);
-        }
-      };
-      copyRecursiveSync(sourceDir, targetDir);
+      // Overwrite the destination without deleting it first to avoid 
+      // crashing the browser's unpacked extension watcher
+      fs.cpSync(sourceDir, targetDir, { recursive: true, force: true });
       console.log('Chrome extension copied to:', targetDir);
     } else {
       console.warn('Chrome extension source not found at:', sourceDir);
@@ -273,6 +261,13 @@ if (!gotTheLock) {
   });
 
   createWindow();
+
+  // Periodically check for updates in the background every 3 minutes
+  setInterval(() => {
+    autoUpdater.checkForUpdates().catch(() => {
+      // Silently ignore network failures during background checks
+    });
+  }, 3 * 60 * 1000);
 
   // Create System Tray
   const iconBase64 = 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAZElEQVQ4T2NkoBAwUqifYdQAhtEwYIYZ/z8D8R+QhIowzEBZkGQIQyOQG/EfI8MwQxRDGBiG/EcykGGIgY0wMEAxkKQRBgaIBnIMZBgjQhPMY4wMQwxsRBEMDAwM//G7ihQzywAAAAD//6x6xP4AAAAASUVORK5CYII=';
