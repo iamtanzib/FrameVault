@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background text-primaryText antialiased;
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    cursor: default;
+    overflow: hidden;
+  }
+
+  /* Kill all scrollbars globally (custom scroll areas handle their own) */
+  *::-webkit-scrollbar {
+    display: none !important;
+  }
+  * {
+    -ms-overflow-style: none !important;
+    scrollbar-width: none !important;
+  }
+
+  /* Accent-tinted selection */
+  ::selection {
+    background: rgba(245, 130, 46, 0.28);
+    color: inherit;
+  }
+
+  *:focus {
+    outline: none;
+  }
+
+  /* Prevent drag ghost images */
+  img, a, button {
+    -webkit-user-drag: none;
+    user-select: none;
+  }
+
+  /* Allow text selection inside inputs/textareas */
+  input, textarea {
+    user-select: text;
+  }
+}
+
+@layer utilities {
+  .drag-region {
+    -webkit-app-region: drag;
+  }
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
+}

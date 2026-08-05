@@ -1,10 +1,12 @@
 {
   "name": "@aio-downloader/standalone",
-  "version": "1.0.9",
+  "version": "1.2.0",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && electron-builder"
+    "build": "tsc && vite build && electron-builder",
+    "test:antibot": "npx tsx tests/anti_bot_test.ts",
+    "test:antibot:yt": "npx tsx tests/anti_bot_test_youtube.ts"
   },
   "dependencies": {
     "@aio-downloader/core": "*",

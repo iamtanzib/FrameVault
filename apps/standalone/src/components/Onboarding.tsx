@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button, Input } from '@aio-downloader/ui';
-import { DownloadCloud, Folder, Chrome, CheckCircle, ChevronRight, X } from 'lucide-react';
+import { DownloadCloud, Folder, Chrome, CheckCircle, ArrowRight, Film } from 'lucide-react';
 
 interface OnboardingProps {
   onComplete: () => void;
@@ -9,6 +9,7 @@ interface OnboardingProps {
 export function Onboarding({ onComplete }: OnboardingProps) {
   const [step, setStep] = useState(1);
   const [destPath, setDestPath] = useState(localStorage.getItem('lastDestPath') || '');
+  const [launchOnStartup, setLaunchOnStartup] = useState(true);
 
   const handleSelectFolder = async () => {
     const res = await (window as any).electronAPI.selectFolder();
@@ -19,117 +20,131 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   };
 
   const handleComplete = () => {
+    (window as any).electronAPI.updateSettings?.({ launchOnStartup });
     localStorage.setItem('onboardingComplete', 'true');
     onComplete();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 bg-background flex flex-col">
-      {/* Draggable Titlebar region */}
-      <div className="h-8 shrink-0 [app-region:drag]" />
+  const destName = destPath ? destPath.split(/[\\/]/).filter(Boolean).pop() : '';
 
-      <div className="flex-1 flex flex-col items-center justify-center p-8 max-w-2xl mx-auto w-full">
-        {/* Progress Dots */}
-        <div className="flex gap-2 mb-12">
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-background font-sans">
+      {/* Draggable titlebar region (frameless window) */}
+      <div className="drag-region flex h-10 shrink-0 items-center gap-2 px-3 select-none">
+        <span className="flex h-[22px] w-[22px] items-center justify-center rounded-[7px] bg-gradient-to-br from-accent to-accentHover shadow-glow-sm">
+          <Film className="h-3.5 w-3.5 text-black" strokeWidth={2.4} />
+        </span>
+        <span className="text-[13px] font-semibold tracking-tight text-primaryText">FrameVault</span>
+      </div>
+
+      <div className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center px-8 pb-6 text-center">
+        {/* Progress dots */}
+        <div className="mb-9 flex gap-1.5">
           {[1, 2, 3, 4].map(i => (
-            <div 
-              key={i} 
-              className={`w-2 h-2 rounded-full transition-colors duration-300 ${step >= i ? 'bg-accent' : 'bg-surface border border-border/50'}`}
+            <div
+              key={i}
+              className={`h-1.5 rounded-full transition-all duration-300 ${step === i ? 'w-5 bg-accent' : step > i ? 'w-1.5 bg-accent/50' : 'w-1.5 bg-border'}`}
             />
           ))}
         </div>
 
         {/* Step 1: Welcome */}
         {step === 1 && (
-          <div className="text-center animate-in fade-in slide-in-from-bottom-4 duration-500 flex flex-col items-center w-full">
-            <div className="w-20 h-20 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center mb-6">
-              <DownloadCloud className="w-10 h-10 text-accent" />
+          <div className="flex w-full flex-col items-center animate-slide-up">
+            <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-accentHover shadow-glow">
+              <DownloadCloud className="h-8 w-8 text-black" />
             </div>
-            <h1 className="text-3xl font-bold text-primaryText mb-4">Welcome to FrameVault</h1>
-            <p className="text-secondaryText text-lg mb-8 max-w-md">
-              The fastest, most reliable way to download media from anywhere on the web. Let's get you set up in just a few seconds.
+            <h1 className="mb-2 text-[20px] font-semibold tracking-tight text-primaryText">Welcome to FrameVault</h1>
+            <p className="mb-7 max-w-sm text-[13px] leading-relaxed text-secondaryText">
+              The fastest, cleanest way to download video and audio from anywhere on the web. Let's get you set up in seconds.
             </p>
-            <Button onClick={() => setStep(2)} className="w-full max-w-xs py-5 text-base">
-              Get Started
-              <ChevronRight className="w-5 h-5 ml-2" />
+            <Button onClick={() => setStep(2)} className="w-full max-w-[240px] gap-2">
+              Get Started <ArrowRight className="h-4 w-4" />
             </Button>
           </div>
         )}
 
         {/* Step 2: Download Folder */}
         {step === 2 && (
-          <div className="text-center animate-in fade-in slide-in-from-right-8 duration-500 flex flex-col items-center w-full">
-            <div className="w-16 h-16 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-6">
-              <Folder className="w-8 h-8 text-blue-400" />
+          <div className="flex w-full flex-col items-center animate-slide-up">
+            <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent/12">
+              <Folder className="h-7 w-7 text-accent" />
             </div>
-            <h2 className="text-2xl font-bold text-primaryText mb-2">Where should we save files?</h2>
-            <p className="text-secondaryText mb-8">
+            <h2 className="mb-2 text-[18px] font-semibold tracking-tight text-primaryText">Where should we save files?</h2>
+            <p className="mb-6 max-w-sm text-[13px] leading-relaxed text-secondaryText">
               Pick a default folder so you don't have to choose it every time.
             </p>
-            
-            <div className="flex gap-2 w-full max-w-md mb-8">
-              <Input 
-                value={destPath} 
-                readOnly 
-                placeholder="Choose a directory..." 
-                className="flex-1 bg-surface/50 font-mono text-sm" 
+
+            <div className="mb-7 flex w-full gap-2">
+              <Input
+                value={destName}
+                readOnly
+                placeholder="Choose a directory..."
+                className="flex-1 text-[13px]"
               />
-              <Button onClick={handleSelectFolder} variant="secondary" className="px-6">
-                Browse
-              </Button>
+              <Button onClick={handleSelectFolder} variant="secondary" className="px-5">Browse</Button>
             </div>
 
-            <div className="flex gap-3 w-full max-w-xs">
+            <div className="flex w-full gap-3">
               <Button onClick={() => setStep(1)} variant="secondary" className="flex-1">Back</Button>
-              <Button onClick={() => setStep(3)} className="flex-1" disabled={!destPath}>
-                Next
-              </Button>
+              <Button onClick={() => setStep(3)} className="flex-1" disabled={!destPath}>Next</Button>
             </div>
           </div>
         )}
 
         {/* Step 3: Chrome Extension */}
         {step === 3 && (
-          <div className="text-center animate-in fade-in slide-in-from-right-8 duration-500 flex flex-col items-center w-full">
-            <div className="w-16 h-16 rounded-2xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center mb-6">
-              <Chrome className="w-8 h-8 text-orange-400" />
+          <div className="flex w-full flex-col items-center animate-slide-up">
+            <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent/12">
+              <Chrome className="h-7 w-7 text-accent" />
             </div>
-            <h2 className="text-2xl font-bold text-primaryText mb-2">Install the Extension</h2>
-            <p className="text-secondaryText mb-6 max-w-md">
-              For the magical "1-click download" experience, you need to load our extension in Chrome.
+            <h2 className="mb-2 text-[18px] font-semibold tracking-tight text-primaryText">Install the extension</h2>
+            <p className="mb-5 max-w-sm text-[13px] leading-relaxed text-secondaryText">
+              For 1-click downloads straight from your browser, load the FrameVault extension in Chrome.
             </p>
-            
-            <div className="bg-surface/50 border border-border/50 rounded-xl p-5 mb-8 text-left max-w-md w-full">
-              <ol className="text-sm text-secondaryText space-y-3 list-decimal list-inside">
-                <li>Go to <span className="text-accent bg-accent/10 px-1 rounded">chrome://extensions</span> in Chrome</li>
-                <li>Enable <strong>Developer Mode</strong> (top right toggle)</li>
-                <li>Click <strong>Load unpacked</strong></li>
-                <li>Select the <code className="text-primaryText bg-surface px-1 py-0.5 rounded border border-border/50">apps/chrome-extension</code> folder</li>
+
+            <div className="mb-7 w-full rounded-xl border border-border bg-surface p-4 text-left">
+              <ol className="list-inside list-decimal space-y-2.5 text-[12px] leading-relaxed text-secondaryText">
+                <li>Open <span className="rounded bg-accent/12 px-1.5 py-0.5 font-medium text-accent">chrome://extensions</span></li>
+                <li>Enable <strong className="font-semibold text-primaryText">Developer Mode</strong> (top right)</li>
+                <li>Click <strong className="font-semibold text-primaryText">Load unpacked</strong></li>
+                <li>Select the <code className="rounded border border-border bg-background px-1.5 py-0.5 text-[11px] text-primaryText">apps/chrome-extension</code> folder</li>
               </ol>
             </div>
 
-            <div className="flex gap-3 w-full max-w-xs">
+            <div className="flex w-full gap-3">
               <Button onClick={() => setStep(2)} variant="secondary" className="flex-1">Back</Button>
-              <Button onClick={() => setStep(4)} className="flex-1">
-                I've done it!
-              </Button>
+              <Button onClick={() => setStep(4)} className="flex-1">I've done it</Button>
             </div>
           </div>
         )}
 
         {/* Step 4: All Set */}
         {step === 4 && (
-          <div className="text-center animate-in fade-in slide-in-from-right-8 duration-500 flex flex-col items-center w-full">
-            <div className="w-20 h-20 rounded-full bg-green-500/10 border border-green-500/20 flex items-center justify-center mb-6 text-green-500">
-              <CheckCircle className="w-10 h-10" />
+          <div className="flex w-full flex-col items-center animate-slide-up">
+            <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-success/15 text-success">
+              <CheckCircle className="h-8 w-8" />
             </div>
-            <h2 className="text-3xl font-bold text-primaryText mb-4">You're all set!</h2>
-            <p className="text-secondaryText text-lg mb-8 max-w-md">
-              Everything is configured perfectly. You're ready to start downloading videos at lightning speed.
+            <h2 className="mb-2 text-[20px] font-semibold tracking-tight text-primaryText">You're all set</h2>
+            <p className="mb-6 max-w-sm text-[13px] leading-relaxed text-secondaryText">
+              Everything's configured. You're ready to start downloading at lightning speed.
             </p>
-            
-            <Button onClick={handleComplete} className="w-full max-w-xs py-5 text-base bg-green-600 hover:bg-green-500 text-white border-green-500">
-              Launch App
+
+            <div 
+              className="mb-8 flex w-full max-w-[280px] cursor-pointer items-center justify-between rounded-xl border border-border bg-surface p-3.5 text-left transition-colors hover:border-borderStrong"
+              onClick={() => setLaunchOnStartup(!launchOnStartup)}
+            >
+              <div>
+                <div className="text-[13px] font-medium text-primaryText">Launch on Startup</div>
+                <div className="text-[11px] text-secondaryText">Run quietly in the background</div>
+              </div>
+              <div className={`relative h-[22px] w-10 shrink-0 rounded-full transition-colors ${launchOnStartup ? 'bg-accent' : 'bg-black/40 ring-1 ring-inset ring-white/10'}`}>
+                <div className={`absolute left-0.5 top-0.5 h-[18px] w-[18px] rounded-full bg-white transition-transform ${launchOnStartup ? 'translate-x-[18px] shadow-sm' : 'translate-x-0 opacity-70'}`} />
+              </div>
+            </div>
+
+            <Button onClick={handleComplete} className="w-full max-w-[280px] gap-2">
+              Launch FrameVault <ArrowRight className="h-4 w-4" />
             </Button>
           </div>
         )}

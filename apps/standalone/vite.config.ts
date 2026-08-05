@@ -6,6 +6,12 @@ import { resolve } from 'path'
 
 export default defineConfig({
   base: process.env.NODE_ENV === 'development' ? '/' : './',
+  resolve: {
+    alias: {
+      '@aio-downloader/ui': resolve(__dirname, '../../packages/ui-components/src/index.ts'),
+      '@aio-downloader/core': resolve(__dirname, '../../packages/core-downloader/src/index.ts')
+    }
+  },
   plugins: [
     react(),
     electron([

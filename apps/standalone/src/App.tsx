@@ -1,7 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { Button, Input, Dropdown, ProgressBar, RangeSlider } from '@aio-downloader/ui';
-import { Settings, Folder, Clock, CheckCircle, ExternalLink, X, Calendar, Filter, Trash2, PlayCircle, Music, SearchX, RotateCcw, DownloadCloud } from 'lucide-react';
+import {
+  Folder, Clock, CheckCircle, ExternalLink, X, Filter, PlayCircle, Music,
+  SearchX, RotateCcw, Link2, Scissors, Pencil, Loader2, AlertCircle, Settings,
+  Download, Trash2, ChevronLeft, DownloadCloud, RefreshCw
+} from 'lucide-react';
 import { Onboarding } from './components/Onboarding';
+import { TitleBar } from './components/TitleBar';
 
 export interface HistoryEntry {
   id: string;
@@ -12,6 +17,17 @@ export interface HistoryEntry {
   timestamp: number;
   format: 'video' | 'audio';
 }
+
+const deriveSource = (hostname: string) => {
+  const h = hostname.replace('www.', '');
+  if (h.includes('youtube') || h.includes('youtu.be')) return 'YouTube';
+  if (h.includes('instagram')) return 'Instagram';
+  if (h.includes('tiktok')) return 'TikTok';
+  if (h.includes('twitter') || h.includes('x.com')) return 'X / Twitter';
+  if (h.includes('facebook') || h.includes('fb.watch')) return 'Facebook';
+  if (h.includes('vimeo')) return 'Vimeo';
+  return 'Web';
+};
 
 function App() {
   const [progress, setProgress] = useState(0);
@@ -29,70 +45,94 @@ function App() {
   const [endText, setEndText] = useState('00:00:00');
   const [status, setStatus] = useState('Ensuring backend binaries...');
   const [isYoutubeUrl, setIsYoutubeUrl] = useState(false);
+  const [isShortsUrl, setIsShortsUrl] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [binariesReady, setBinariesReady] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showAlreadyExistsModal, setShowAlreadyExistsModal] = useState(false);
   const [downloadedFilePath, setDownloadedFilePath] = useState('');
-  
+  const [extensionCookies, setExtensionCookies] = useState<any[]>([]);
+  const [wsError, setWsError] = useState('');
+
+  // Card / metadata state
+  const [metadata, setMetadata] = useState<{ title: string; thumbnail: string; duration: number } | null>(null);
+  const [metaLoading, setMetaLoading] = useState(false);
+  const [sourceName, setSourceName] = useState('');
+  const [thumbError, setThumbError] = useState(false);
+  const [showRename, setShowRename] = useState(false);
+
   // Settings & Updates State
   const [showSettings, setShowSettings] = useState(false);
   const [launchOnStartup, setLaunchOnStartup] = useState(false);
   const [updateReady, setUpdateReady] = useState(false);
-  
+
   // History State
   const [activeTab, setActiveTab] = useState<'download' | 'history'>('download');
   const [historyItems, setHistoryItems] = useState<HistoryEntry[]>([]);
   const [filterSource, setFilterSource] = useState('All Sources');
 
+  const contentRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (activeTab === 'history') {
       setFilterSource('All Sources');
-      (window as any).electronAPI.setWindowHeight?.(740);
-    } else if (isYoutubeUrl) {
-      (window as any).electronAPI.setWindowHeight?.(800);
-    } else {
-      (window as any).electronAPI.setWindowHeight?.(640);
     }
-  }, [isYoutubeUrl, activeTab]);
+  }, [activeTab]);
 
   useEffect(() => {
     // Get version and check for update notes
     (window as any).electronAPI.getAppVersion?.().then((version: string) => {
       setAppVersion(version);
-      
+
       (window as any).electronAPI.getSettings?.().then((settings: any) => {
         setLaunchOnStartup(settings?.launchOnStartup === true);
       });
-      
-      const lastVersion = localStorage.getItem('framevault-last-version');
-      if (lastVersion && lastVersion !== version) {
-        // App was updated! Fetch release notes from GitHub
-        fetch(`https://api.github.com/repos/iamtanzib/FrameVault/releases/tags/v${version}`)
-          .then(res => res.json())
-          .then(data => {
-            if (data.body) {
+
+      fetch(`https://api.github.com/repos/iamtanzib/FrameVault/releases/tags/v${version}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.body) {
+            setCurrentReleaseNotes(data.body);
+            if (lastVersion && lastVersion !== version) {
               setUpdateNotes(data.body);
-            } else {
-              setUpdateNotes(`Successfully updated to version ${version}!`);
             }
-          })
-          .catch(() => {
+          } else if (lastVersion && lastVersion !== version) {
             setUpdateNotes(`Successfully updated to version ${version}!`);
-          });
+          }
+        })
+        .catch(() => {
+          if (lastVersion && lastVersion !== version) {
+            setUpdateNotes(`Successfully updated to version ${version}!`);
+          }
+        });
+        
+      if (lastVersion !== version) {
+        localStorage.setItem('framevault-last-version', version);
       }
-      localStorage.setItem('framevault-last-version', version);
     });
 
     // Setup listeners
     (window as any).electronAPI.onProgress((payload: any) => {
       if (typeof payload === 'number') {
         setProgress(payload);
+        setStatus('Downloading...');
       } else if (payload) {
         if (payload.percent !== undefined) setProgress(payload.percent);
-        if (payload.eta) setEta(payload.eta);
+        if (payload.eta) {
+          const isTimeFormat = /^[\d:]+$/.test(payload.eta.trim());
+          if (isTimeFormat) {
+            setEta(payload.eta);
+            setStatus('Downloading...');
+          } else {
+            setEta('');
+            setStatus(payload.eta);
+          }
+        } else {
+          setStatus(payload.percent === 100 ? 'Finalizing...' : 'Downloading...');
+        }
+      } else {
+        setStatus('Downloading...');
       }
-      setStatus('Downloading...');
     });
 
     (window as any).electronAPI.onLog((line: string) => {
@@ -112,6 +152,14 @@ function App() {
 
     (window as any).electronAPI.onUpdateDownloadedReady?.((info: any) => {
       setUpdateInfo({ downloading: false, percent: 100 });
+      if (info && info.releaseNotes) {
+        let notes = info.releaseNotes;
+        if (typeof notes !== 'string') {
+          // electron-updater sometimes returns an array of release notes
+          notes = Array.isArray(notes) ? notes.map((n: any) => n.note || n).join('\n') : String(notes);
+        }
+        setPendingUpdateNotes(notes);
+      }
       setUpdateReady(true);
     });
 
@@ -124,14 +172,27 @@ function App() {
         setStatus(`Error: ${res.error}`);
       }
     });
-    
+
     // Listen for Chrome extension download requests
     (window as any).electronAPI.onExtensionDownload((data: any) => {
       if (data && data.url) {
         setActiveTab('download');
+        setShowSettings(false);
         setUrl(data.url);
+        setExtensionCookies(data.cookies || []);
         setFormat(data.format === 'mp3' ? 'audio' : 'video');
       }
+    });
+
+    // Listen for incoming extension cookies (JIT)
+    (window as any).electronAPI.onExtensionCookies?.((data: any) => {
+      if (data && data.cookies) {
+        setExtensionCookies(data.cookies || []);
+      }
+    });
+
+    (window as any).electronAPI.onWsError?.((msg: string) => {
+      setWsError(msg);
     });
 
     // Check for updates manually from frontend to prevent race conditions
@@ -153,6 +214,11 @@ function App() {
     }
   };
 
+  const handleClearHistory = async () => {
+    await (window as any).electronAPI.clearHistory();
+    setHistoryItems([]);
+  };
+
   const resetForm = () => {
     setUrl('');
     setFileName('');
@@ -160,6 +226,7 @@ function App() {
     setEta('');
     setStatus('');
     setFormError('');
+    setShowRename(false);
   };
 
   const getValidUrl = (input: string) => {
@@ -184,60 +251,84 @@ function App() {
   };
 
   useEffect(() => {
+    let isMounted = true;
+
     if (!url) {
       setUrlError('');
       setIsYoutubeUrl(false);
+      setIsShortsUrl(false);
       setMaxDuration(0);
+      setSliderRange([0, 0]);
       setStatus('');
       setFormError('');
-      setFileName('');
-      return;
+      setMetadata(null);
+      setMetaLoading(false);
+      setSourceName('');
+      setThumbError(false);
+      return () => { isMounted = false; };
     }
 
     const validUrl = getValidUrl(url);
     if (!validUrl) {
       setUrlError('Please enter a valid URL');
       setIsYoutubeUrl(false);
+      setIsShortsUrl(false);
       setMaxDuration(0);
       setSliderRange([0, 0]);
       setStatus('');
       setFormError('');
-      setFileName('');
-      return;
+      setMetadata(null);
+      setMetaLoading(false);
+      setSourceName('');
+      setThumbError(false);
+      return () => { isMounted = false; };
     }
-      
+
     setUrlError('');
     const parsed = new URL(validUrl);
+    
+    // Request cookies for the new URL from the extension immediately
+    (window as any).electronAPI.requestExtensionCookies?.(validUrl);
     const isYoutube = parsed.hostname.includes('youtube.com') || parsed.hostname.includes('youtu.be');
     setIsYoutubeUrl(isYoutube);
-    
+
     const isShorts = parsed.pathname.includes('/shorts/');
-    
-    if (isYoutube && !isShorts) {
-      setStatus('Fetching video metadata...');
-      (window as any).electronAPI.getMetadata(validUrl).then((res: any) => {
-        if (res.success) {
-          if (res.metadata?.duration > 0) {
+    setIsShortsUrl(isShorts);
+    setSourceName(deriveSource(parsed.hostname));
+
+    // Reset trim + card, show loading. (Trim panel stays gated to YouTube non-Shorts.)
+    setMaxDuration(0);
+    setSliderRange([0, 0]);
+    setMetadata(null);
+    setThumbError(false);
+    setMetaLoading(true);
+    setStatus('');
+
+    const timer = setTimeout(() => {
+      (window as any).electronAPI.getMetadata(validUrl, extensionCookies).then((res: any) => {
+        if (!isMounted) return;
+        setMetaLoading(false);
+        if (res.success && res.metadata) {
+          setMetadata({
+            title: res.metadata.title || '',
+            thumbnail: res.metadata.thumbnail || '',
+            duration: res.metadata.duration || 0
+          });
+          if (isYoutube && !isShorts && res.metadata.duration > 0) {
             setMaxDuration(res.metadata.duration);
             setSliderRange([0, res.metadata.duration]);
-          } else {
-            setMaxDuration(0);
-            setSliderRange([0, 0]);
           }
-          setStatus('');
         } else {
-          setMaxDuration(0);
-          setSliderRange([0, 0]);
-          
-          const errMsg = res.error?.split('\n')?.[0] || 'Failed to fetch metadata';
-          setStatus(`Metadata Error: ${errMsg}`);
+          setMetadata(null);
         }
+      }).catch(() => {
+        if (!isMounted) return;
+        setMetaLoading(false);
+        setMetadata(null);
       });
-    } else {
-      setMaxDuration(0);
-      setSliderRange([0, 0]);
-      setStatus('');
-    }
+    }, 400);
+
+    return () => { isMounted = false; clearTimeout(timer); };
   }, [url]);
 
   const formatTime = (secs: number) => {
@@ -245,6 +336,15 @@ function App() {
     const m = Math.floor((secs % 3600) / 60).toString().padStart(2, '0');
     const s = Math.floor(secs % 60).toString().padStart(2, '0');
     return `${h}:${m}:${s}`;
+  };
+
+  const formatDurationShort = (secs: number) => {
+    if (!secs || secs <= 0) return '';
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = Math.floor(secs % 60);
+    if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
   useEffect(() => {
@@ -286,7 +386,7 @@ function App() {
       setFormError('Please enter a URL and select a destination');
       return;
     }
-    
+
     setFormError('');
     setIsDownloading(true);
     setProgress(0);
@@ -294,15 +394,22 @@ function App() {
     setStatus('Initializing download engine...');
 
     const activeFileName = nameOverride !== undefined ? nameOverride : fileName;
+    let finalFileName = activeFileName.trim();
+    if (!finalFileName && metadata?.title) {
+      // Create a safe default filename to avoid yt-dlp truncation bug on long titles
+      const safeTitle = metadata.title.replace(/[\\/:*?"<>|]/g, '').substring(0, 70).trim();
+      finalFileName = `${safeTitle} [${metadata.id || Date.now()}]`;
+    }
 
     const options = {
       url: getValidUrl(url) || url,
       outputFolder: destPath,
       quality,
       format: format === 'audio' ? 'mp3' : 'mp4',
-      fileName: activeFileName.trim() || undefined,
+      fileName: finalFileName || undefined,
       startTime: (maxDuration > 0 && sliderRange[0] > 0) ? formatTime(sliderRange[0]) : '',
-      endTime: (maxDuration > 0 && sliderRange[1] < maxDuration) ? formatTime(sliderRange[1]) : ''
+      endTime: (maxDuration > 0 && sliderRange[1] < maxDuration) ? formatTime(sliderRange[1]) : '',
+      cookies: extensionCookies
     };
 
     const res = await (window as any).electronAPI.download(options);
@@ -310,30 +417,36 @@ function App() {
       setStatus('');
       setProgress(100);
       setDownloadedFilePath(res.filePath);
-      
+
       if (!res.alreadyExists) {
         // Build History Entry
-        const parsed = new URL(options.url);
-        let sourceName = parsed.hostname.replace('www.', '');
-        if (sourceName.includes('youtube.com') || sourceName.includes('youtu.be')) sourceName = 'YouTube';
-        else if (sourceName.includes('instagram.com')) sourceName = 'Instagram';
-        else if (sourceName.includes('tiktok.com')) sourceName = 'TikTok';
-        else if (sourceName.includes('twitter.com') || sourceName.includes('x.com')) sourceName = 'X/Twitter';
-        else sourceName = 'Other';
-        
-        const pathParts = res.filePath.split(/[\\/]/);
-        const savedName = pathParts[pathParts.length - 1] || 'Unknown File';
+        try {
+          const parsed = new URL(options.url);
+          let src = parsed.hostname.replace('www.', '');
+          if (src.includes('youtube.com') || src.includes('youtu.be')) src = 'YouTube';
+          else if (src.includes('instagram.com')) src = 'Instagram';
+          else if (src.includes('tiktok.com')) src = 'TikTok';
+          else if (src.includes('twitter.com') || src.includes('x.com')) src = 'X/Twitter';
+          else if (src.includes('facebook.com') || src.includes('fb.watch')) src = 'Facebook';
+          else src = 'Other';
 
-        await (window as any).electronAPI.addHistory({
-          id: Date.now().toString(),
-          url: options.url,
-          source: sourceName,
-          fileName: savedName,
-          filePath: res.filePath,
-          timestamp: Date.now(),
-          format: options.format
-        });
-        loadHistory();
+          const pathParts = res.filePath.split(/[\\/]/);
+          const savedName = pathParts[pathParts.length - 1] || 'Unknown File';
+
+          await (window as any).electronAPI.addHistory({
+            id: Date.now().toString(),
+            url: options.url,
+            source: src,
+            fileName: savedName,
+            filePath: res.filePath,
+            timestamp: Date.now(),
+            format: format
+          });
+          loadHistory();
+        } catch (e) {
+          console.error('Failed to add history entry:', e);
+          // Still show success modal even if history fails
+        }
       }
 
       if (res.alreadyExists) {
@@ -342,7 +455,8 @@ function App() {
         setShowSuccessModal(true);
       }
     } else {
-      setStatus(`Error: ${res.error}`);
+      setFormError(`Download Failed: ${res.error}`);
+      setStatus('');
     }
     setIsDownloading(false);
   };
@@ -377,25 +491,67 @@ function App() {
   const [updateInfo, setUpdateInfo] = useState<{ downloading: boolean, percent: number }>({ downloading: false, percent: 0 });
   const [appVersion, setAppVersion] = useState('');
   const [updateNotes, setUpdateNotes] = useState<string | null>(null);
+  const [pendingUpdateNotes, setPendingUpdateNotes] = useState<string | null>(null);
+  const [currentReleaseNotes, setCurrentReleaseNotes] = useState<string | null>(null);
+  const [showUpdatesModal, setShowUpdatesModal] = useState(false);
+
+  // ---- Dynamic window height ----
+  // Special screens use fixed comfortable heights.
+  useEffect(() => {
+    if (!binariesReady) {
+      (window as any).electronAPI.setWindowHeight?.(440);
+    } else if (showOnboarding) {
+      (window as any).electronAPI.setWindowHeight?.(580);
+    }
+  }, [binariesReady, showOnboarding]);
+
+  // Main app: grow/shrink the window to fit content exactly.
+  useEffect(() => {
+    if (!binariesReady || showOnboarding) return;
+    const el = contentRef.current;
+    if (!el) return;
+    const apply = () => {
+      const h = Math.ceil(el.getBoundingClientRect().height);
+      const clamped = Math.min(780, Math.max(300, h));
+      (window as any).electronAPI.setWindowHeight?.(clamped);
+    };
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    apply();
+    return () => ro.disconnect();
+  }, [binariesReady, showOnboarding]);
 
   if (!binariesReady) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center font-sans text-center px-6">
-        {status.startsWith('Error') ? (
-          <>
-            <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
-               <span className="text-red-500 font-bold text-lg">!</span>
-            </div>
-            <div className="text-[14px] font-semibold text-red-400 mb-2">Initialization Failed</div>
-            <div className="text-[12px] font-medium text-secondaryText max-w-md">{status}</div>
-          </>
-        ) : (
-          <>
-            <div className="w-10 h-10 border-4 border-border border-t-accent rounded-full animate-spin mb-5"></div>
-            <div className="text-[14px] font-semibold text-primaryText mb-2">FrameVault</div>
-            <div className="text-[12px] font-medium text-secondaryText">{status || 'Initializing engine...'}</div>
-          </>
-        )}
+      <div className="relative h-screen w-full bg-background font-sans">
+        {/* Minimal draggable strip with a close affordance (frameless window) */}
+        <div className="drag-region absolute inset-x-0 top-0 flex h-10 items-center justify-end px-2">
+          <button
+            onClick={() => (window as any).electronAPI.windowClose?.()}
+            className="no-drag flex h-8 w-8 items-center justify-center rounded-lg text-secondaryText transition-colors hover:bg-error hover:text-white"
+          >
+            <X className="h-[17px] w-[17px]" strokeWidth={2} />
+          </button>
+        </div>
+        <div className="flex h-full flex-col items-center justify-center px-8 text-center">
+          {status.startsWith('Error') ? (
+            <>
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-error/12">
+                <AlertCircle className="h-6 w-6 text-error" />
+              </div>
+              <div className="mb-1.5 text-[14px] font-semibold text-error">Initialization Failed</div>
+              <div className="max-w-md text-[12px] font-medium text-secondaryText">{status}</div>
+            </>
+          ) : (
+            <>
+              <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-accent to-accentHover shadow-glow">
+                <Loader2 className="h-6 w-6 animate-spin text-black" />
+              </div>
+              <div className="mb-1.5 text-[15px] font-semibold text-primaryText">FrameVault</div>
+              <div className="text-[12px] font-medium text-secondaryText">{status || 'Initializing engine...'}</div>
+            </>
+          )}
+        </div>
       </div>
     );
   }
@@ -403,355 +559,564 @@ function App() {
   const filteredHistory = historyItems
     .filter(item => filterSource === 'All Sources' || item.source === filterSource);
 
+  const hasValidUrl = !!getValidUrl(url) && !urlError;
+  const showTrim = isYoutubeUrl && !isShortsUrl;
+  const renameOpen = showRename || !!fileName;
+  const destName = destPath ? destPath.split(/[\\/]/).filter(Boolean).pop() : '';
+
   return (
     <>
       {showOnboarding && <Onboarding onComplete={() => setShowOnboarding(false)} />}
-      <div className="flex-1 w-full h-full bg-background font-sans text-primaryText text-[12px] flex flex-row overflow-hidden">
-        
-        {/* Sidebar Navigation */}
-        <div className="w-[68px] shrink-0 bg-[#0E0E0E] border-r border-border flex flex-col items-center py-6 gap-2 relative z-10 shadow-[4px_0_24px_rgba(0,0,0,0.2)]">
-          <button 
-            onClick={() => setActiveTab('download')}
-            className={`relative w-full flex justify-center py-4 transition-all duration-200 ${activeTab === 'download' && !showSettings ? 'text-accent bg-white/[0.03]' : 'text-secondaryText hover:text-primaryText hover:bg-white/[0.02]'}`}
-          >
-            {activeTab === 'download' && !showSettings && <div className="absolute left-0 top-1/2 -translate-y-1/2 h-[50%] w-[3px] bg-accent rounded-r-full shadow-[0_0_8px_rgba(242,226,184,0.5)]" />}
-            <DownloadCloud className={`w-[22px] h-[22px] ${activeTab === 'download' && !showSettings ? 'fill-accent/20 stroke-[1.5px]' : 'stroke-[1.5px]'}`} />
-          </button>
 
-          <button 
-            onClick={() => { setActiveTab('history'); setFilterSource('All Sources'); setShowSettings(false); }}
-            className={`relative w-full flex justify-center py-4 transition-all duration-200 ${activeTab === 'history' && !showSettings ? 'text-accent bg-white/[0.03]' : 'text-secondaryText hover:text-primaryText hover:bg-white/[0.02]'}`}
-          >
-            {activeTab === 'history' && !showSettings && <div className="absolute left-0 top-1/2 -translate-y-1/2 h-[50%] w-[3px] bg-accent rounded-r-full shadow-[0_0_8px_rgba(242,226,184,0.5)]" />}
-            <Clock className={`w-[22px] h-[22px] ${activeTab === 'history' && !showSettings ? 'fill-accent/20 stroke-[1.5px]' : 'stroke-[1.5px]'}`} />
-          </button>
-          
-          <div className="flex-1" />
-          
-          <button 
-            onClick={() => setShowSettings(true)}
-            className={`relative w-full flex justify-center py-4 transition-all duration-200 ${showSettings ? 'text-accent bg-white/[0.03]' : 'text-secondaryText hover:text-primaryText hover:bg-white/[0.02]'}`}
-          >
-            {showSettings && <div className="absolute left-0 top-1/2 -translate-y-1/2 h-[50%] w-[3px] bg-accent rounded-r-full shadow-[0_0_8px_rgba(242,226,184,0.5)]" />}
-            <Settings className={`w-[22px] h-[22px] ${showSettings ? 'fill-accent/20 stroke-[1.5px]' : 'stroke-[1.5px]'}`} />
-          </button>
-        </div>
+      <div ref={contentRef} className="w-full bg-background font-sans text-primaryText">
+        <TitleBar
+          appVersion={appVersion}
+          activeView={activeTab}
+          showSettings={showSettings}
+          updateState={{ ready: !!updateNotes, downloading: updateInfo.downloading, percent: updateInfo.percent }}
+          onGoDownload={() => { setActiveTab('download'); setShowSettings(false); }}
+          onToggleHistory={() => { setActiveTab(activeTab === 'history' ? 'download' : 'history'); setShowSettings(false); }}
+          onOpenSettings={() => setShowSettings(true)}
+          onOpenUpdates={() => setShowUpdatesModal(true)}
+        />
 
-        {/* Main Content Area */}
-        <div className="flex-1 flex flex-col overflow-y-auto overflow-x-hidden relative">
-          <div className="px-6 pt-5 pb-4 flex-1 flex flex-col w-full max-w-[620px] mx-auto">
-            {/* Header */}
-            <div className="flex justify-between items-center mb-6">
-              <h1 className="text-[15px] font-semibold flex items-center gap-2">
-                FrameVault 
-                {appVersion && <span className="text-secondaryText text-[10px] font-medium bg-surface border border-border px-1.5 py-0.5 rounded">v{appVersion}</span>}
-              </h1>
-            </div>
-
+        <div className="px-5 pb-5">
           {activeTab === 'download' ? (
-          <div className="space-y-5">
-            
-            {/* Source URL */}
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <label className="text-[11px] font-medium text-secondaryText">Source URL</label>
-                {urlError && <span className="text-[11px] font-medium text-red-400">{urlError}</span>}
-              </div>
-              <Input 
-                placeholder="Paste video or audio link here..." 
-                className={`w-full ${urlError ? 'border-red-500 focus-visible:border-red-500 text-red-400 placeholder:text-red-400/50' : ''}`}
-                value={url}
-                onChange={(e: any) => setUrl(e.target.value)}
-              />
-            </div>
-
-            {/* File Name */}
-            <div className="space-y-1">
-              <label className="text-[11px] font-medium text-secondaryText">File Name</label>
-              <Input 
-                placeholder="Enter custom file name (optional)..." 
-                className="w-full"
-                value={fileName}
-                onChange={(e: any) => setFileName(e.target.value)}
-              />
-            </div>
-
-            {/* Quality & Format Row */}
-            <div className="flex gap-6">
-              <div className="flex-1 space-y-1">
-                <label className="text-[11px] font-medium text-secondaryText">Quality</label>
-                <Dropdown 
-                  value={quality}
-                  onChange={(e: any) => setQuality(e.target.value)}
-                  options={[
-                    { label: 'Best Available', value: 'best' },
-                    { label: '1080p', value: '1080' },
-                    { label: '720p', value: '720' }
-                  ]} 
+            <div className={`flex flex-col ${!hasValidUrl ? 'gap-7 pt-8 pb-4' : 'gap-4'}`}>
+              {/* URL field — the primary control, always present */}
+              <div className="animate-fade-in">
+                {!hasValidUrl && (
+                  <div className="mb-6 mt-1 text-center">
+                    <h1 className="text-[17px] font-semibold tracking-tight text-primaryText">Download any video</h1>
+                    <p className="mt-1.5 text-[12.5px] text-secondaryText">Paste a link from YouTube, Instagram, X, TikTok & more.</p>
+                  </div>
+                )}
+                <Input
+                  icon={<Link2 className="h-4 w-4" />}
+                  placeholder="Paste video or audio link here..."
+                  className={`h-11 text-[13.5px] ${urlError ? 'border-error/70 text-error placeholder:text-error/40 focus-visible:border-error/70 focus-visible:ring-error/15' : ''}`}
+                  value={url}
+                  onChange={(e: any) => {
+                    setUrl(e.target.value);
+                    setExtensionCookies([]);
+                  }}
+                  autoFocus
                 />
-              </div>
-              
-              <div className="flex-1 space-y-1">
-                <label className="text-[11px] font-medium text-secondaryText">Format</label>
-                <div className="flex items-center gap-1 border border-border/60 rounded-md p-1 bg-background h-9 w-full">
-                  <button 
-                    onClick={() => setFormat('video')}
-                    className={`flex-1 h-full rounded text-[12px] font-medium transition-all ${format === 'video' ? 'bg-surface text-primaryText shadow-sm' : 'text-secondaryText hover:text-primaryText'}`}
-                  >
-                    Video + Audio
-                  </button>
-                  <button 
-                    onClick={() => setFormat('audio')}
-                    className={`flex-1 h-full rounded text-[12px] font-medium transition-all ${format === 'audio' ? 'bg-surface text-primaryText shadow-sm' : 'text-secondaryText hover:text-primaryText'}`}
-                  >
-                    Audio Only
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Time Range Row (Only for YouTube) */}
-            {isYoutubeUrl && (
-              <div className="border border-border rounded p-3 bg-background flex flex-col justify-center min-h-[100px]">
-                {maxDuration > 0 ? (
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center px-1">
-                      <span className="text-[12px] font-medium text-primaryText">Duration</span>
-                      <span className="text-[12px] font-medium text-accent">{formatTime(maxDuration)}</span>
-                    </div>
-                    
-                    <div className="flex items-center justify-between border border-border rounded-md px-3 py-2 bg-surface text-[11px]">
-                      <div className="flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-secondaryText" />
-                        <span className="text-secondaryText font-medium">Start</span>
-                        <input 
-                          type="text"
-                          value={startText}
-                          onChange={(e) => setStartText(e.target.value)}
-                          onBlur={handleStartBlur}
-                          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-                          className="bg-background px-1.5 py-0.5 border border-border rounded text-primaryText w-[60px] text-center focus:outline-none focus:border-accent"
-                        />
-                      </div>
-                      
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-secondaryText font-medium">End</span>
-                        <input 
-                          type="text"
-                          value={endText}
-                          onChange={(e) => setEndText(e.target.value)}
-                          onBlur={handleEndBlur}
-                          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-                          className="bg-background px-1.5 py-0.5 border border-border rounded text-primaryText w-[60px] text-center focus:outline-none focus:border-accent"
-                        />
-                        <Clock className="w-3.5 h-3.5 text-secondaryText" />
-                      </div>
-                    </div>
-
-                    <div className="px-1 pt-1 pb-1">
-                      <RangeSlider min={0} max={maxDuration} value={sliderRange} onChange={setSliderRange} />
-                    </div>
+                {urlError && (
+                  <div className="mt-1.5 flex items-center gap-1.5 px-1 text-[11px] font-medium text-error">
+                    <AlertCircle className="h-3.5 w-3.5" /> {urlError}
                   </div>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full text-secondaryText space-y-2">
-                    <Clock className="w-6 h-6 opacity-50 animate-pulse" />
-                    <span className="text-[11px]">Fetching metadata...</span>
+                )}
+                {wsError && !urlError && (
+                  <div className="mt-1.5 flex items-center gap-1.5 px-1 text-[11px] font-medium text-yellow-500">
+                    <AlertCircle className="h-3.5 w-3.5" /> {wsError}
                   </div>
                 )}
               </div>
-            )}
 
-            {/* Destination Path */}
-            <div className="space-y-1">
-              <label className="text-[11px] font-medium text-secondaryText">Destination Path</label>
-              <div className="flex gap-2">
-                <Input value={destPath} readOnly className="flex-1 text-secondaryText" placeholder="Select a folder..." />
-                <Button variant="browse" className="shrink-0 flex items-center" onClick={handleBrowse}>
-                  <Folder className="w-3.5 h-3.5 mr-1.5" />
-                  Browse
-                </Button>
-              </div>
-            </div>
+              {/* Reveal: video card + options */}
+              {hasValidUrl && (
+                <div className="flex flex-col gap-4 animate-slide-up">
+                  {/* Video card */}
+                  <div className="flex items-center gap-3.5 rounded-xl border border-border bg-surface p-3 shadow-card">
+                    <div className="relative h-[68px] w-[120px] shrink-0 overflow-hidden rounded-lg bg-gradient-to-br from-white/[0.06] to-white/[0.01] ring-1 ring-inset ring-white/[0.04]">
+                      {metadata?.thumbnail && !thumbError ? (
+                        <img
+                          src={metadata.thumbnail}
+                          alt=""
+                          className="h-full w-full object-cover"
+                          onError={() => setThumbError(true)}
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center">
+                          {metaLoading
+                            ? <Loader2 className="h-5 w-5 animate-spin text-secondaryText/70" />
+                            : (format === 'audio'
+                                ? <Music className="h-6 w-6 text-secondaryText/60" />
+                                : <PlayCircle className="h-6 w-6 text-secondaryText/60" />)}
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      {metaLoading ? (
+                        <div className="space-y-2">
+                          <div className="h-3 w-3/4 animate-pulse rounded bg-white/[0.06]" />
+                          <div className="h-2.5 w-1/3 animate-pulse rounded bg-white/[0.05]" />
+                        </div>
+                      ) : (
+                        <>
+                          <div className="line-clamp-2 text-[13px] font-semibold leading-snug text-primaryText">
+                            {metadata?.title || 'Ready to download'}
+                          </div>
+                          <div className="mt-1.5 flex items-center gap-2">
+                            <span className="rounded-md bg-accent/12 px-1.5 py-0.5 text-[10px] font-semibold text-accent">
+                              {sourceName || 'Web'}
+                            </span>
+                            {metadata && metadata.duration > 0 && (
+                              <span className="flex items-center gap-1 text-[10.5px] font-medium text-secondaryText">
+                                <Clock className="h-3 w-3" /> {formatDurationShort(metadata.duration)}
+                              </span>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
 
-            {/* Progress Section */}
-            <div className="pt-2 pb-1 space-y-2">
-              <div className="flex justify-between items-center text-[11px] font-medium">
-                <span className={status.startsWith('Error') ? "text-error" : "text-accent"}>{status}</span>
-                <div className="flex items-center">
-                  {(isDownloading && eta) && (
-                    <>
-                      <span className="text-secondaryText">ETA: {eta}</span>
-                      <span className="text-border" style={{ margin: '0 14px' }}>•</span>
-                    </>
+                  {/* Format + Quality */}
+                  <div className="flex gap-3">
+                    <div className="flex h-10 flex-1 items-center gap-1 rounded-lg border border-border bg-surface p-1">
+                      <button
+                        onClick={() => setFormat('video')}
+                        className={`h-full flex-1 rounded-md text-[12px] font-medium transition-all ${format === 'video' ? 'bg-white/[0.08] text-primaryText shadow-sm' : 'text-secondaryText hover:text-primaryText'}`}
+                      >
+                        Video + Audio
+                      </button>
+                      <button
+                        onClick={() => setFormat('audio')}
+                        className={`h-full flex-1 rounded-md text-[12px] font-medium transition-all ${format === 'audio' ? 'bg-white/[0.08] text-primaryText shadow-sm' : 'text-secondaryText hover:text-primaryText'}`}
+                      >
+                        Audio Only
+                      </button>
+                    </div>
+                    <div className="w-[150px]">
+                      <Dropdown
+                        value={quality}
+                        onChange={(e: any) => setQuality(e.target.value)}
+                        options={[
+                          { label: 'Best Available', value: 'best' },
+                          { label: '1080p', value: '1080' },
+                          { label: '720p', value: '720' }
+                        ]}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Rename (collapsible) */}
+                  {!renameOpen ? (
+                    <button
+                      onClick={() => setShowRename(true)}
+                      className="flex items-center gap-1.5 self-start text-[11.5px] font-medium text-secondaryText transition-colors hover:text-accent"
+                    >
+                      <Pencil className="h-3.5 w-3.5" /> Add a custom file name
+                    </button>
+                  ) : (
+                    <div className="animate-slide-down">
+                      <Input
+                        icon={<Pencil className="h-3.5 w-3.5" />}
+                        placeholder="Custom file name (optional)..."
+                        value={fileName}
+                        onChange={(e: any) => setFileName(e.target.value)}
+                      />
+                    </div>
                   )}
-                  {(isDownloading || progress > 0) && <span className="text-accent min-w-[40px] text-right">{progress.toFixed(1)}%</span>}
-                </div>
-              </div>
-              {(isDownloading || progress > 0) && <ProgressBar progress={progress} />}
-            </div>
 
-            {/* Download Button Area */}
-            <div className="-mt-1 flex justify-between items-center">
-              <div>
-                {formError && (
-                  <div className="text-[11px] text-error font-medium px-3 py-1.5 bg-error/10 border border-error/20 rounded-md">
-                    {formError}
+                  {/* Trim (YouTube, non-Shorts only) */}
+                  {showTrim && (
+                    <div className="rounded-xl border border-border bg-surface p-3.5 animate-slide-down">
+                      {maxDuration > 0 ? (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="flex items-center gap-1.5 text-[12px] font-semibold text-primaryText">
+                              <Scissors className="h-3.5 w-3.5 text-accent" /> Trim clip
+                            </span>
+                            <span className="text-[11px] font-medium text-secondaryText">
+                              of {formatDurationShort(maxDuration)}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between rounded-lg border border-border bg-background px-3 py-2 text-[11px]">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-medium text-secondaryText">Start</span>
+                              <input
+                                type="text"
+                                value={startText}
+                                onChange={(e) => setStartText(e.target.value)}
+                                onBlur={handleStartBlur}
+                                onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                                className="w-[62px] rounded-md border border-border bg-surface px-1.5 py-1 text-center font-mono text-primaryText focus:border-accent/70 focus:outline-none"
+                              />
+                            </div>
+                            <div className="h-px w-6 bg-border" />
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-medium text-secondaryText">End</span>
+                              <input
+                                type="text"
+                                value={endText}
+                                onChange={(e) => setEndText(e.target.value)}
+                                onBlur={handleEndBlur}
+                                onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                                className="w-[62px] rounded-md border border-border bg-surface px-1.5 py-1 text-center font-mono text-primaryText focus:border-accent/70 focus:outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="px-1 pt-0.5">
+                            <RangeSlider min={0} max={maxDuration} value={sliderRange} onChange={setSliderRange} />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center gap-2 py-3 text-secondaryText">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span className="text-[11.5px]">Fetching trim range...</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Destination */}
+                  <div className="flex items-center gap-2 rounded-lg border border-border bg-surface p-1.5 pl-3">
+                    <Folder className="h-4 w-4 shrink-0 text-secondaryText" />
+                    <div className="min-w-0 flex-1">
+                      {destPath ? (
+                        <div className="truncate text-[12px] font-medium text-primaryText" title={destPath}>{destName}</div>
+                      ) : (
+                        <div className="text-[12px] text-secondaryText">No folder selected</div>
+                      )}
+                    </div>
+                    <Button variant="browse" className="h-8 shrink-0 px-3 text-[12px]" onClick={handleBrowse}>
+                      Change
+                    </Button>
                   </div>
-                )}
-              </div>
-              <Button onClick={() => handleDownload()} disabled={isDownloading || !binariesReady} className="w-[120px]">
-                {isDownloading ? 'Downloading...' : 'Download'}
-              </Button>
+
+                  {/* Progress */}
+                  {(isDownloading || progress > 0) && (
+                    <div className="space-y-2 animate-fade-in">
+                      <div className="flex items-center justify-between text-[11px] font-medium">
+                        <span className={status.startsWith('Error') ? 'text-error' : 'text-accent'}>
+                          {status || 'Downloading...'}
+                        </span>
+                        <div className="flex items-center gap-3 text-secondaryText">
+                          {(isDownloading && eta) && <span>ETA {eta}</span>}
+                          <span className="min-w-[42px] text-right font-semibold text-accent">{progress.toFixed(1)}%</span>
+                        </div>
+                      </div>
+                      <ProgressBar progress={progress} />
+                    </div>
+                  )}
+
+                  {/* Error line (destination missing etc.) */}
+                  {formError && (
+                    <div className="flex items-center gap-2 rounded-lg border border-error/25 bg-error/10 px-3 py-2 text-[11.5px] font-medium text-error animate-fade-in">
+                      <AlertCircle className="h-4 w-4 shrink-0" /> {formError}
+                    </div>
+                  )}
+
+                  {/* Download button */}
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => handleDownload()}
+                      disabled={isDownloading || !binariesReady}
+                      className="flex-1 gap-2"
+                    >
+                      {isDownloading ? (
+                        <><Loader2 className="h-4 w-4 animate-spin" /> Downloading...</>
+                      ) : (
+                        <><Download className="h-4 w-4" /> Download</>
+                      )}
+                    </Button>
+                    {isDownloading && (
+                      <button
+                        onClick={() => {
+                          if ((window as any).electronAPI.cancelDownload) {
+                            (window as any).electronAPI.cancelDownload();
+                          }
+                          setIsDownloading(false);
+                          setStatus('Cancelled by user');
+                        }}
+                        className="flex h-9 w-11 shrink-0 items-center justify-center rounded-lg border border-error/30 bg-error/10 text-error transition-colors hover:bg-error/20"
+                        title="Cancel Download"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Developer Log (Temporary) */}
+                  {process.env.NODE_ENV === 'development' && (
+                    <div className="mt-4 p-3 rounded-lg border border-primary/30 bg-primary/10">
+                      <div className="flex justify-between items-center bg-black/40 p-3 rounded-lg border border-white/5 font-mono">
+                        <div>
+                          <div className="text-white font-bold mb-1">DEV LOG:</div>
+                          <div className="text-white/70">Extracted Cookies: <span className={extensionCookies.length > 0 ? "text-green-400 font-bold" : "text-yellow-400 font-bold"}>{extensionCookies.length}</span></div>
+                          {extensionCookies.length > 0 && (
+                            <div className="text-white/40 text-[10px] mt-1 break-all">
+                              Sample: {extensionCookies[0].name}={extensionCookies[0].value.substring(0, 10)}...
+                            </div>
+                          )}
+                        </div>
+                        <button 
+                          onClick={(e) => {
+                            e.preventDefault();
+                            if (url) (window as any).electronAPI.requestExtensionCookies?.(url);
+                          }}
+                          className="text-xs bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded transition-colors"
+                        >
+                          Fetch Cookies
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Empty-state destination hint */}
+              {!hasValidUrl && (
+                <button
+                  onClick={handleBrowse}
+                  className="group flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2.5 text-left transition-colors hover:border-borderStrong"
+                >
+                  <Folder className="h-4 w-4 shrink-0 text-secondaryText" />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[10px] font-medium uppercase tracking-wide text-secondaryText">Save location</div>
+                    <div className="truncate text-[12px] font-medium text-primaryText" title={destPath}>
+                      {destPath || 'Choose a folder…'}
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-medium text-secondaryText group-hover:text-accent">Change</span>
+                </button>
+              )}
             </div>
-          </div>
           ) : (
-            <div className="flex flex-col h-full overflow-hidden">
-              <div className="flex gap-3 mb-5 shrink-0 justify-end items-center">
-                <span className="text-[12px] text-secondaryText flex items-center gap-1.5 font-medium">
-                   <Filter className="w-3.5 h-3.5" />
-                   Source
-                </span>
-                <div className="w-[150px]">
-                  <Dropdown
-                    options={[
-                      { label: 'All Sources', value: 'All Sources' },
-                      { label: 'YouTube', value: 'YouTube' },
-                      { label: 'Instagram', value: 'Instagram' },
-                      { label: 'TikTok', value: 'TikTok' },
-                      { label: 'X/Twitter', value: 'X/Twitter' },
-                      { label: 'Other', value: 'Other' }
-                    ]}
-                    value={filterSource}
-                    onChange={(e: any) => setFilterSource(e.target.value)}
-                  />
+            /* ---------- History ---------- */
+            <div className="flex flex-col animate-fade-in">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <button 
+                    onClick={() => setActiveTab('download')}
+                    className="flex h-6 w-6 items-center justify-center rounded-md text-secondaryText transition-colors hover:bg-white/[0.06] hover:text-primaryText"
+                  >
+                    <ChevronLeft className="h-4 w-4" strokeWidth={2.5} />
+                  </button>
+                  <h2 className="text-[14px] font-semibold text-primaryText">History</h2>
+                </div>
+                <div className="flex items-center gap-2">
+                  {historyItems.length > 0 && (
+                    <Button variant="ghost" onClick={handleClearHistory} className="h-9 px-3 text-error hover:bg-error/10 hover:text-error mr-1">
+                      <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Clear All
+                    </Button>
+                  )}
+                  <Filter className="h-3.5 w-3.5 text-secondaryText" />
+                  <div className="w-[150px]">
+                    <Dropdown
+                      className="h-9"
+                      options={[
+                        { label: 'All Sources', value: 'All Sources' },
+                        { label: 'YouTube', value: 'YouTube' },
+                        { label: 'Instagram', value: 'Instagram' },
+                        { label: 'TikTok', value: 'TikTok' },
+                        { label: 'X/Twitter', value: 'X/Twitter' },
+                        { label: 'Facebook', value: 'Facebook' },
+                        { label: 'Other', value: 'Other' }
+                      ]}
+                      value={filterSource}
+                      onChange={(e: any) => setFilterSource(e.target.value)}
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] space-y-2 pr-1 pb-4 flex flex-col">
+              <div className="flex max-h-[420px] flex-col gap-2 overflow-y-auto pr-0.5">
                 {filteredHistory.map(item => (
-                    <div key={item.id} className="bg-surface/50 border border-border/40 hover:border-border/80 rounded-lg p-3 transition-colors flex items-center justify-between gap-3 group">
-                       <div className="flex items-center gap-3 overflow-hidden">
-                         <div className="w-8 h-8 rounded-full bg-accent/10 text-accent flex items-center justify-center shrink-0">
-                           {item.format === 'audio' ? <Music className="w-4 h-4" /> : <PlayCircle className="w-4 h-4" />}
-                         </div>
-                         <div className="overflow-hidden">
-                           <div className="text-[12px] font-medium text-primaryText truncate w-[300px]">{item.fileName}</div>
-                           <div className="text-[10px] text-secondaryText mt-0.5 flex gap-2">
-                             <span className="text-accent/80 font-medium">{item.source}</span>
-                             <span>•</span>
-                             <span>{new Date(item.timestamp).toLocaleString()}</span>
-                           </div>
-                         </div>
-                       </div>
-                       <Button 
-                         variant="secondary" 
-                         className="shrink-0 h-7 text-[11px] px-3 opacity-0 group-hover:opacity-100 transition-opacity"
-                         onClick={() => (window as any).electronAPI.showItemInFolder(item.filePath)}
-                       >
-                         Reveal
-                       </Button>
+                  <div key={item.id} className="group flex items-center justify-between gap-3 rounded-xl border border-border bg-surface p-2.5 transition-colors hover:border-borderStrong">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${item.format === 'audio' ? 'bg-accent/12 text-accent' : 'bg-white/[0.06] text-primaryText'}`}>
+                        {item.format === 'audio' ? <Music className="h-4 w-4" /> : <PlayCircle className="h-4 w-4" />}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="truncate text-[12px] font-medium text-primaryText">{item.fileName}</div>
+                        <div className="mt-0.5 flex items-center gap-2 text-[10px] text-secondaryText">
+                          <span className="font-medium text-accent/90">{item.source}</span>
+                          <span>·</span>
+                          <span>{new Date(item.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
+                        </div>
+                      </div>
                     </div>
+                    <Button
+                      variant="ghost"
+                      className="h-8 shrink-0 px-3 text-[11px] opacity-0 transition-opacity group-hover:opacity-100"
+                      onClick={() => (window as any).electronAPI.showItemInFolder(item.filePath)}
+                    >
+                      Reveal
+                    </Button>
+                  </div>
                 ))}
+
                 {historyItems.length > 0 && filteredHistory.length === 0 && (
-                  <div className="flex-1 flex flex-col items-center justify-center text-secondaryText pb-10">
-                    <div className="w-16 h-16 rounded-full bg-surface border border-border/40 flex items-center justify-center mb-5 opacity-70">
-                      <SearchX className="w-8 h-8 text-secondaryText" />
+                  <div className="flex flex-col items-center justify-center py-12 text-center text-secondaryText">
+                    <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-surface">
+                      <SearchX className="h-7 w-7 text-secondaryText" />
                     </div>
-                    <span className="text-[14px] font-bold text-primaryText mb-2">No result found</span>
-                    <span className="text-[12px] mb-6">We can't find any item matching your search.</span>
-                    <Button variant="secondary" onClick={() => { setFilterSource('All Sources'); }} className="h-9 text-[12px] px-5 font-medium flex items-center gap-2">
-                       <RotateCcw className="w-4 h-4" />
-                       Reset filter
+                    <span className="mb-1 text-[13px] font-semibold text-primaryText">No results</span>
+                    <span className="mb-5 text-[12px]">Nothing matches this filter.</span>
+                    <Button variant="secondary" onClick={() => setFilterSource('All Sources')} className="h-9 gap-2 px-4 text-[12px]">
+                      <RotateCcw className="h-4 w-4" /> Reset filter
                     </Button>
                   </div>
                 )}
+
                 {historyItems.length === 0 && (
-                  <div className="flex-1 flex flex-col items-center justify-center text-secondaryText opacity-50 pb-10">
-                    <Clock className="w-8 h-8 mb-2" />
-                    <span>No download history yet</span>
+                  <div className="flex flex-col items-center justify-center py-14 text-center text-secondaryText">
+                    <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-surface">
+                      <Clock className="h-7 w-7 opacity-70" />
+                    </div>
+                    <span className="text-[13px] font-medium text-primaryText">No downloads yet</span>
+                    <span className="mt-1 text-[12px]">Your completed downloads will appear here.</span>
                   </div>
                 )}
               </div>
             </div>
           )}
         </div>
-      
+      </div>
+
+      {/* Update downloading overlay */}
       {updateInfo.downloading && !updateReady && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-surface border border-border w-[400px] rounded-xl shadow-2xl p-8 flex flex-col items-center text-center">
-            <div className="w-16 h-16 rounded-full bg-accent/20 flex items-center justify-center mb-6">
-              <RotateCcw className="w-8 h-8 text-accent animate-[spin_3s_linear_infinite]" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in">
+          <div className="flex w-[360px] flex-col items-center rounded-2xl border border-border bg-surface p-7 text-center shadow-modal animate-scale-in">
+            <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent/15">
+              <RotateCcw className="h-7 w-7 text-accent" style={{ animation: 'spin 3s linear infinite' }} />
             </div>
-            <h2 className="text-[18px] font-semibold text-primaryText mb-3">FrameVault is Updating...</h2>
-            <p className="text-secondaryText text-[13px] mb-8">Please wait while we download the latest version.</p>
-            
-            <div className="w-full bg-background h-3 rounded-full overflow-hidden mb-3 border border-border">
-              <div 
-                className="bg-accent h-full transition-all duration-300"
-                style={{ width: `${Math.max(0, Math.min(100, updateInfo.percent))}%` }}
-              />
+            <h2 className="mb-2 text-[16px] font-semibold text-primaryText">Updating FrameVault…</h2>
+            <p className="mb-6 text-[12.5px] text-secondaryText">Downloading the latest version. Hang tight.</p>
+            <div className="mb-2 h-2 w-full overflow-hidden rounded-full bg-white/[0.06]">
+              <div className="h-full rounded-full bg-accent transition-all duration-300" style={{ width: `${Math.max(0, Math.min(100, updateInfo.percent))}%` }} />
             </div>
-            <div className="text-accent font-medium">{Math.round(updateInfo.percent)}%</div>
+            <div className="text-[12px] font-semibold text-accent">{Math.round(updateInfo.percent)}%</div>
           </div>
         </div>
       )}
 
+      {/* Update ready overlay */}
       {updateReady && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-surface border border-border w-[400px] rounded-xl shadow-2xl p-8 flex flex-col items-center text-center">
-            <div className="w-16 h-16 rounded-full bg-success/20 flex items-center justify-center mb-6">
-              <CheckCircle className="w-8 h-8 text-success" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in">
+          <div className="flex w-[380px] flex-col items-center rounded-2xl border border-border bg-surface p-7 text-center shadow-modal animate-scale-in">
+            <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-success/15 text-success">
+              <CheckCircle className="h-7 w-7" />
             </div>
-            <h2 className="text-[18px] font-semibold text-primaryText mb-3">Update Ready!</h2>
-            <p className="text-secondaryText text-[13px] mb-8">A new version has been downloaded and verified successfully. Restart now to install.</p>
+            <h2 className="mb-2 text-[16px] font-semibold text-primaryText">Update ready</h2>
+            <p className="mb-4 text-[12.5px] text-secondaryText">A new version has been downloaded and verified.</p>
+            
+            {pendingUpdateNotes && (
+              <div className="mb-6 w-full rounded-xl bg-black/20 p-4 text-left border border-white/5 max-h-[160px] overflow-y-auto custom-scrollbar">
+                <div className="mb-2 text-[12px] font-semibold uppercase tracking-wider text-primaryText">Release Notes</div>
+                <div className="text-[12px] text-secondaryText/90 leading-relaxed" dangerouslySetInnerHTML={{ __html: pendingUpdateNotes.replace(/\n/g, '<br/>') }} />
+              </div>
+            )}
             
             <div className="flex w-full gap-3">
-              <Button 
-                variant="secondary" 
-                className="flex-1"
-                onClick={() => setUpdateReady(false)}
-              >
-                Later
-              </Button>
-              <Button 
-                variant="primary" 
-                className="flex-1"
-                onClick={() => (window as any).electronAPI.installUpdate()}
-              >
-                Restart Now
-              </Button>
+              <Button variant="secondary" className="flex-1" onClick={() => setUpdateReady(false)}>Later</Button>
+              <Button variant="primary" className="flex-1" onClick={() => (window as any).electronAPI.installUpdate()}>Restart now</Button>
             </div>
           </div>
         </div>
       )}
-      </div>
-    </div>
-      
+
+      {/* What's New Modal (After Update) */}
+      {updateNotes && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in">
+          <div className="flex w-[420px] flex-col items-start rounded-2xl border border-border bg-surface p-8 shadow-modal animate-scale-in">
+            <h2 className="mb-2 text-[20px] font-semibold text-primaryText">What's New in {appVersion}</h2>
+            <div className="mb-7 mt-2 max-h-[300px] w-full overflow-y-auto text-[13px] leading-relaxed text-secondaryText custom-scrollbar pr-2">
+              <div dangerouslySetInnerHTML={{ __html: updateNotes.replace(/\n/g, '<br/>') }} />
+            </div>
+            <Button variant="primary" className="w-full" onClick={() => setUpdateNotes(null)}>Awesome</Button>
+          </div>
+        </div>
+      )}
+
+      {/* Updates Center Modal */}
+      {showUpdatesModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="flex w-[460px] flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-modal animate-scale-in">
+            
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-border bg-black/20 px-6 py-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/15">
+                  <DownloadCloud className="h-5 w-5 text-accent" />
+                </div>
+                <div>
+                  <h2 className="text-[15px] font-semibold text-primaryText">Updates Center</h2>
+                  <div className="text-[12px] text-secondaryText">Current Version: v{appVersion}</div>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowUpdatesModal(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-secondaryText transition-colors hover:bg-white/[0.06] hover:text-error"
+              >
+                <X className="h-4 w-4" strokeWidth={2.5} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              {/* Status Banner */}
+              {updateReady ? (
+                <div className="mb-6 flex flex-col items-center justify-center rounded-xl border border-success/30 bg-success/10 p-5 text-center">
+                  <CheckCircle className="mb-2 h-7 w-7 text-success" />
+                  <div className="mb-1 font-semibold text-success">Update Ready to Install</div>
+                  <div className="mb-4 text-[12px] text-success/80">Restart the app to apply the newest features.</div>
+                  <Button variant="primary" onClick={() => (window as any).electronAPI.installUpdate()} className="h-8 bg-success hover:bg-success/90 text-white">
+                    Restart Now
+                  </Button>
+                </div>
+              ) : updateInfo.downloading ? (
+                <div className="mb-6 flex flex-col items-center justify-center rounded-xl border border-accent/20 bg-accent/5 p-5 text-center">
+                  <RefreshCw className="mb-3 h-6 w-6 text-accent animate-spin" />
+                  <div className="mb-2 text-[13px] font-semibold text-primaryText">Downloading Update...</div>
+                  <div className="mb-2 h-1.5 w-full max-w-[200px] overflow-hidden rounded-full bg-black/40">
+                    <div className="h-full rounded-full bg-accent transition-all duration-300" style={{ width: `${Math.max(0, Math.min(100, updateInfo.percent))}%` }} />
+                  </div>
+                  <div className="text-[11px] font-medium text-accent">{Math.round(updateInfo.percent)}%</div>
+                </div>
+              ) : (
+                <div className="mb-6 flex items-center justify-between rounded-xl border border-border bg-black/20 p-4">
+                  <div className="flex items-center gap-3">
+                    <CheckCircle className="h-5 w-5 text-secondaryText" />
+                    <div className="text-[13px] font-medium text-primaryText">You're up to date!</div>
+                  </div>
+                  <Button variant="secondary" className="h-8 text-[12px]" onClick={() => (window as any).electronAPI.checkForUpdates?.()}>
+                    Check Again
+                  </Button>
+                </div>
+              )}
+
+              {/* Release Notes (Only show if available) */}
+              {((updateReady && pendingUpdateNotes) || (!updateReady && currentReleaseNotes)) && (
+                <div className="flex flex-col">
+                  <div className="mb-3 text-[12px] font-semibold uppercase tracking-wider text-secondaryText">
+                    {updateReady ? "Upcoming Changes" : `What's new in v${appVersion}`}
+                  </div>
+                  <div className="w-full rounded-xl border border-border bg-black/10 p-4 text-[12px] leading-relaxed text-secondaryText max-h-[220px] overflow-y-auto custom-scrollbar">
+                    {updateReady && pendingUpdateNotes ? (
+                       <div dangerouslySetInnerHTML={{ __html: pendingUpdateNotes.replace(/\n/g, '<br/>') }} />
+                    ) : (
+                       <div dangerouslySetInnerHTML={{ __html: currentReleaseNotes!.replace(/\n/g, '<br/>') }} />
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
+
       {/* Success Modal */}
       {showSuccessModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px] animate-in fade-in duration-200">
-          <div className="bg-surface border border-border/80 w-[340px] rounded-xl shadow-2xl p-6 flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
-            <div className="w-12 h-12 rounded-full bg-success/20 text-success flex items-center justify-center mb-4">
-              <CheckCircle className="w-6 h-6" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="flex w-[340px] flex-col items-center rounded-2xl border border-border bg-surface p-6 text-center shadow-modal animate-scale-in">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-success/15 text-success">
+              <CheckCircle className="h-6 w-6" />
             </div>
-            <h2 className="text-[16px] font-semibold text-primaryText mb-2">Download Complete!</h2>
-            <p className="text-[13px] text-secondaryText mb-6">
-              Your file has been successfully saved to the destination folder.
-            </p>
+            <h2 className="mb-1.5 text-[16px] font-semibold text-primaryText">Download complete</h2>
+            <p className="mb-6 text-[12.5px] text-secondaryText">Your file has been saved to the destination folder.</p>
             <div className="flex w-full gap-3">
-              <Button 
-                variant="secondary" 
-                className="flex-1"
-                onClick={() => {
-                  setShowSuccessModal(false);
-                  resetForm();
-                }}
-              >
-                Close
-              </Button>
-              <Button 
-                variant="primary" 
-                className="flex-1 flex items-center justify-center gap-1.5"
+              <Button variant="secondary" className="flex-1" onClick={() => { setShowSuccessModal(false); resetForm(); }}>Close</Button>
+              <Button
+                variant="primary"
+                className="flex-1 gap-1.5"
                 onClick={() => {
                   if (downloadedFilePath) {
                     (window as any).electronAPI.showItemInFolder(downloadedFilePath);
@@ -762,8 +1127,7 @@ function App() {
                   resetForm();
                 }}
               >
-                <Folder className="w-3.5 h-3.5" />
-                Reveal
+                <Folder className="h-3.5 w-3.5" /> Reveal
               </Button>
             </div>
           </div>
@@ -772,50 +1136,26 @@ function App() {
 
       {/* Already Exists Modal */}
       {showAlreadyExistsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px] animate-in fade-in duration-200">
-          <div className="bg-surface border border-border/80 w-[400px] rounded-xl shadow-2xl p-8 flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
-            <div className="w-14 h-14 bg-red-500/10 rounded-full flex items-center justify-center mb-5">
-              <Folder className="w-7 h-7 text-red-500" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="flex w-[360px] flex-col items-center rounded-2xl border border-border bg-surface p-7 text-center shadow-modal animate-scale-in">
+            <div className="mb-5 flex h-13 w-13 items-center justify-center rounded-2xl bg-error/12">
+              <AlertCircle className="h-6 w-6 text-error" />
             </div>
-            
-            <h3 className="text-primaryText font-semibold text-lg mb-2">File Already Exists</h3>
-            <p className="text-secondaryText text-[13px] mb-8 max-w-[300px]">
-              A file with this name is already in the folder.
-            </p>
-            
+            <h3 className="mb-1.5 text-[16px] font-semibold text-primaryText">File already exists</h3>
+            <p className="mb-6 max-w-[300px] text-[12.5px] text-secondaryText">A file with this name is already in the folder.</p>
             <div className="flex w-full gap-3">
-              <Button 
-                variant="secondary" 
-                className="flex-1 text-[13px] whitespace-nowrap"
-                onClick={() => {
-                  setShowAlreadyExistsModal(false);
-                  resetForm();
-                }}
-              >
-                Cancel
-              </Button>
-              <Button 
-                variant="primary" 
-                className="flex-1 text-[13px] whitespace-nowrap"
-                onClick={() => {
-                  setShowAlreadyExistsModal(false);
-                  handleDownloadAsNew();
-                }}
-              >
-                Save as New
-              </Button>
+              <Button variant="secondary" className="flex-1" onClick={() => { setShowAlreadyExistsModal(false); resetForm(); }}>Cancel</Button>
+              <Button variant="primary" className="flex-1" onClick={() => { setShowAlreadyExistsModal(false); handleDownloadAsNew(); }}>Save as new</Button>
             </div>
-            
-            <button 
+            <button
               onClick={() => {
                 (window as any).electronAPI.showItemInFolder(downloadedFilePath);
                 setShowAlreadyExistsModal(false);
                 resetForm();
               }}
-              className="mt-6 flex items-center gap-2 text-secondaryText hover:text-primaryText text-[13px] transition-colors"
+              className="mt-5 flex items-center gap-2 text-[12px] text-secondaryText transition-colors hover:text-primaryText"
             >
-              <ExternalLink className="w-4 h-4" />
-              Reveal existing file
+              <ExternalLink className="h-3.5 w-3.5" /> Reveal existing file
             </button>
           </div>
         </div>
@@ -823,59 +1163,47 @@ function App() {
 
       {/* Update Notes Modal */}
       {updateNotes && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-6 animate-in fade-in duration-200">
-          <div className="bg-background border border-border w-full max-w-sm rounded-xl shadow-2xl p-6 flex flex-col items-center text-center animate-in zoom-in-95 duration-200">
-            <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center mb-4 text-accent">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm animate-fade-in">
+          <div className="flex w-full max-w-sm flex-col items-center rounded-2xl border border-border bg-surface p-6 text-center shadow-modal animate-scale-in">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/12 text-accent">
+              <Download className="h-6 w-6" />
             </div>
-            <h2 className="text-[16px] font-bold text-primaryText mb-2">Update Successful!</h2>
-            <div className="text-[12px] font-medium text-secondaryText mb-6 max-h-[200px] overflow-y-auto whitespace-pre-wrap text-left w-full p-4 bg-surface rounded-lg border border-border/50 custom-scrollbar">
+            <h2 className="mb-2 text-[16px] font-semibold text-primaryText">Update successful</h2>
+            <div className="custom-scrollbar mb-6 max-h-[200px] w-full overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-background p-4 text-left text-[12px] font-medium text-secondaryText">
               {updateNotes}
             </div>
-            <Button
-              variant="primary"
-              onClick={() => setUpdateNotes(null)}
-              className="w-full"
-            >
-              Awesome!
-            </Button>
+            <Button variant="primary" onClick={() => setUpdateNotes(null)} className="w-full">Awesome</Button>
           </div>
         </div>
       )}
 
       {/* Settings Modal */}
       {showSettings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-[2px] animate-in fade-in duration-200">
-          <div className="bg-surface border border-border w-[380px] rounded-xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-background/50">
-              <h2 className="text-[15px] font-semibold text-primaryText flex items-center gap-2">
-                <Settings className="w-4 h-4 text-secondaryText" />
-                Settings
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in" onClick={() => setShowSettings(false)}>
+          <div className="w-[380px] overflow-hidden rounded-2xl border border-border bg-surface shadow-modal animate-scale-in" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
+              <h2 className="flex items-center gap-2 text-[14px] font-semibold text-primaryText">
+                <Settings className="h-4 w-4 text-secondaryText" /> Settings
               </h2>
-              <button 
-                onClick={() => setShowSettings(false)}
-                className="p-1 rounded-md text-secondaryText hover:text-primaryText hover:bg-surface transition-colors"
-              >
-                <X className="w-4 h-4" />
+              <button onClick={() => setShowSettings(false)} className="flex h-8 w-8 items-center justify-center rounded-lg text-secondaryText transition-colors hover:bg-white/[0.06] hover:text-primaryText">
+                <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="p-6">
-              <div 
-                className="flex items-center justify-between cursor-pointer group"
+            <div className="p-5">
+              <div
+                className="group flex cursor-pointer items-center justify-between"
                 onClick={() => {
-                    const val = !launchOnStartup;
-                    setLaunchOnStartup(val);
-                    (window as any).electronAPI.updateSettings({ launchOnStartup: val });
+                  const val = !launchOnStartup;
+                  setLaunchOnStartup(val);
+                  (window as any).electronAPI.updateSettings({ launchOnStartup: val });
                 }}
               >
                 <div className="flex flex-col">
-                  <span className="text-[13px] font-medium text-primaryText group-hover:text-accent transition-colors">Launch on Startup</span>
-                  <span className="text-[11px] text-secondaryText mt-0.5">Start FrameVault automatically when Windows boots.</span>
+                  <span className="text-[13px] font-medium text-primaryText transition-colors group-hover:text-accent">Launch on startup</span>
+                  <span className="mt-0.5 text-[11px] text-secondaryText">Start FrameVault automatically when Windows boots.</span>
                 </div>
-                <div 
-                  className={`w-9 h-5 rounded-full p-0.5 transition-colors flex items-center ${launchOnStartup ? 'bg-accent' : 'bg-border'}`}
-                >
-                  <div className={`w-4 h-4 bg-primaryText rounded-full shadow-sm transform transition-transform ${launchOnStartup ? 'translate-x-4' : 'translate-x-0'}`} />
+                <div className={`flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors ${launchOnStartup ? 'bg-accent' : 'bg-border'}`}>
+                  <div className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${launchOnStartup ? 'translate-x-4' : 'translate-x-0'}`} />
                 </div>
               </div>
             </div>
@@ -884,6 +1212,6 @@ function App() {
       )}
     </>
   );
-};
+}
 
 export default App;

@@ -1,5 +1,3 @@
-# What's New in FrameVault
+﻿# What's New in FrameVault
 
-- **Brand New Sidebar Navigation:** We've completely redesigned the layout! The navigation is now on the left sidebar for a sleeker, more modern aesthetic.
-- **Settings Menu:** Settings have been moved to the sidebar for easier access.
-- **Fixes:** Squashed a bug where the Chrome Extension would sometimes rapidly connect and disconnect in the background.
+- Update YouTube Shorts metadata fetching and various fixes - Fix race condition in update IPC flow - Bump version to 1.0.8 for update test - Fix autoUpdater native dialogs and silent installer - Update system revamp and bump version to 1.0.6
