@@ -147,7 +147,21 @@ function App() {
     });
 
     (window as any).electronAPI.onUpdateStarted?.((info: any) => {
+      setIsCheckingUpdate(false);
+      setUpdateCheckMessage('');
       setUpdateInfo({ downloading: true, percent: 0 });
+    });
+
+    (window as any).electronAPI.onUpdateNotAvailable?.(() => {
+      setIsCheckingUpdate(false);
+      setUpdateCheckMessage("You're already on the latest version!");
+      setTimeout(() => setUpdateCheckMessage(''), 3000);
+    });
+
+    (window as any).electronAPI.onUpdateError?.((err: string) => {
+      setIsCheckingUpdate(false);
+      setUpdateCheckMessage(`Error: ${err}`);
+      setTimeout(() => setUpdateCheckMessage(''), 3000);
     });
 
     (window as any).electronAPI.onUpdateProgress?.((progressObj: any) => {
@@ -498,6 +512,8 @@ function App() {
   const [pendingUpdateNotes, setPendingUpdateNotes] = useState<string | null>(null);
   const [currentReleaseNotes, setCurrentReleaseNotes] = useState<string | null>(null);
   const [showUpdatesModal, setShowUpdatesModal] = useState(false);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [updateCheckMessage, setUpdateCheckMessage] = useState('');
 
   // ---- Dynamic window height ----
   // Special screens use fixed comfortable heights.
@@ -1087,14 +1103,30 @@ function App() {
                   <div className="text-[11px] font-medium text-accent">{Math.round(updateInfo.percent)}%</div>
                 </div>
               ) : (
-                <div className="mb-6 flex items-center justify-between rounded-xl border border-border bg-black/20 p-4">
-                  <div className="flex items-center gap-3">
-                    <CheckCircle className="h-5 w-5 text-secondaryText" />
-                    <div className="text-[13px] font-medium text-primaryText">You're up to date!</div>
+                <div className="mb-6 flex flex-col gap-2 rounded-xl border border-border bg-black/20 p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <CheckCircle className="h-5 w-5 text-secondaryText" />
+                      <div className="text-[13px] font-medium text-primaryText">You're up to date!</div>
+                    </div>
+                    <Button 
+                      variant="secondary" 
+                      className="h-8 text-[12px] min-w-[100px]" 
+                      disabled={isCheckingUpdate}
+                      onClick={() => {
+                        setIsCheckingUpdate(true);
+                        setUpdateCheckMessage('');
+                        (window as any).electronAPI.checkForUpdates?.();
+                      }}
+                    >
+                      {isCheckingUpdate ? <RefreshCw className="h-3 w-3 animate-spin" /> : "Check Again"}
+                    </Button>
                   </div>
-                  <Button variant="secondary" className="h-8 text-[12px]" onClick={() => (window as any).electronAPI.checkForUpdates?.()}>
-                    Check Again
-                  </Button>
+                  {updateCheckMessage && (
+                    <div className="text-[12px] text-accent animate-fade-in text-right">
+                      {updateCheckMessage}
+                    </div>
+                  )}
                 </div>
               )}
 

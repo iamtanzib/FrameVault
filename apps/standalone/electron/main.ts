@@ -218,6 +218,18 @@ if (!gotTheLock) {
     }
   });
 
+  autoUpdater.on('update-not-available', () => {
+    if (mainWindow) {
+      mainWindow.webContents.send('update-not-available');
+    }
+  });
+
+  autoUpdater.on('error', (err) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('update-error', err?.message || 'Unknown error');
+    }
+  });
+
   createWindow();
 
   // Create System Tray
