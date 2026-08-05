@@ -1,6 +1,6 @@
 {
   "name": "@aio-downloader/standalone",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
@@ -58,6 +58,13 @@
     "files": [
       "dist/**/*",
       "dist-electron/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../chrome-extension",
+        "to": "chrome-extension",
+        "filter": ["**/*"]
+      }
     ]
   }
 }

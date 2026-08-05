@@ -1254,6 +1254,29 @@ function App() {
                   <div className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${launchOnStartup ? 'translate-x-4' : 'translate-x-0'}`} />
                 </div>
               </div>
+
+              <div className="my-4 h-[1px] w-full bg-border" />
+
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="text-[13px] font-medium text-primaryText">Chrome Extension</span>
+                  <span className="mt-0.5 text-[11px] max-w-[220px] text-secondaryText">Auto-updates silently. Just load the hidden folder once.</span>
+                </div>
+                <Button 
+                  variant="secondary" 
+                  className="h-7 text-[11px] min-w-[80px]"
+                  onClick={async (e) => {
+                    const btn = e.currentTarget;
+                    const path = await (window as any).electronAPI.copyExtensionPath();
+                    btn.innerHTML = '<span class="text-success flex items-center gap-1">Copied ✓</span>';
+                    setTimeout(() => {
+                      btn.textContent = 'Copy Path';
+                    }, 2000);
+                  }}
+                >
+                  Copy Path
+                </Button>
+              </div>
             </div>
           </div>
         </div>

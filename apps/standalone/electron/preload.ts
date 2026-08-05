@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   windowClose: () => ipcRenderer.send('window-close'),
   openFolder: (path: string) => ipcRenderer.send('open-folder', path),
   showItemInFolder: (path: string) => ipcRenderer.send('show-item-in-folder', path),
+  copyExtensionPath: () => ipcRenderer.invoke('copy-extension-path'),
   getHistory: () => ipcRenderer.invoke('get-history'),
   addHistory: (entry: any) => ipcRenderer.invoke('add-history', entry),
   clearHistory: () => ipcRenderer.invoke('clear-history'),

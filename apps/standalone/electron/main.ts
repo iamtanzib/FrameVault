@@ -1,10 +1,44 @@
-import { app, BrowserWindow, ipcMain, dialog, Notification, Tray, Menu, nativeImage, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Notification, Tray, Menu, nativeImage, screen, clipboard } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { WebSocketServer } from 'ws';
 import { ensureBinaries, Downloader, getMetadata } from '@aio-downloader/core';
+
+function extractExtensionSilently() {
+  try {
+    const isDev = !app.isPackaged;
+    const sourceDir = isDev 
+      ? path.join(__dirname, '../../chrome-extension') 
+      : path.join(process.resourcesPath, 'chrome-extension');
+    
+    const targetDir = path.join(app.getPath('userData'), 'chrome-extension');
+    
+    if (fs.existsSync(sourceDir)) {
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+      }
+      const copyRecursiveSync = (src: string, dest: string) => {
+        const stats = fs.statSync(src);
+        if (stats.isDirectory()) {
+          if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+          fs.readdirSync(src).forEach(file => {
+            copyRecursiveSync(path.join(src, file), path.join(dest, file));
+          });
+        } else {
+          fs.copyFileSync(src, dest);
+        }
+      };
+      copyRecursiveSync(sourceDir, targetDir);
+      console.log('Chrome extension copied to:', targetDir);
+    } else {
+      console.warn('Chrome extension source not found at:', sourceDir);
+    }
+  } catch (err) {
+    console.error('Failed to extract chrome extension:', err);
+  }
+}
 
 // Set true once the app has loaded and survived a short window without
 // crashing. The auto-rollback below only triggers while the app is NOT yet
@@ -145,6 +179,12 @@ ipcMain.on('cancel-download', () => {
   });
 });
 
+ipcMain.handle('copy-extension-path', () => {
+  const targetDir = path.join(app.getPath('userData'), 'chrome-extension');
+  clipboard.writeText(targetDir);
+  return targetDir;
+});
+
 if (!gotTheLock) {
   app.quit();
 } else {
@@ -162,6 +202,8 @@ if (!gotTheLock) {
   });
 
   app.whenReady().then(() => {
+  extractExtensionSilently();
+
   if (process.defaultApp) {
     if (process.argv.length >= 2) {
       app.setAsDefaultProtocolClient('framevault', process.execPath, [path.resolve(process.argv[1])]);
